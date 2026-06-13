@@ -11,6 +11,9 @@ use cairn_api::AppState;
 use cairn_core::{Config, NewMemory};
 use clap::{Parser, Subcommand};
 
+mod hook;
+mod install;
+
 #[derive(Parser)]
 #[command(
     name = "cairn",
@@ -71,6 +74,8 @@ enum Cmd {
     Update,
     /// Run the MCP server over stdio (point your agent's MCP config at `cairn mcp`).
     Mcp,
+    /// Internal: handle a Claude Code lifecycle hook event (reads JSON on stdin).
+    Hook { event: String },
 }
 
 #[tokio::main]
@@ -133,15 +138,7 @@ async fn main() -> anyhow::Result<()> {
             println!("  blobs    : {}", cfg.blobs_dir().display());
         }
         Cmd::Pair { code } => coming_soon(&format!("pairing this device with code {code}")),
-        Cmd::Install { agent, all } => {
-            if all {
-                coming_soon("auto-detecting and configuring all installed agents");
-            } else if let Some(agent) = agent {
-                coming_soon(&format!("configuring agent `{agent}`"));
-            } else {
-                coming_soon("pass an agent name or --all");
-            }
-        }
+        Cmd::Install { agent, all } => install::run(agent.as_deref(), all)?,
         Cmd::Login { server } => coming_soon(&format!(
             "logging in to {}",
             server.as_deref().unwrap_or("<server>")
@@ -152,6 +149,7 @@ async fn main() -> anyhow::Result<()> {
             let server = cairn_mcp::McpServer::new(&cfg)?;
             server.serve_stdio()?;
         }
+        Cmd::Hook { event } => hook::run(&cfg, &event)?,
     }
     Ok(())
 }

@@ -77,7 +77,11 @@ cd web && npm install && npm run dev   # http://localhost:3000 (talks to the API
 
 Cairn speaks the Model Context Protocol over stdio — point any MCP-capable agent at `cairn mcp`.
 
-For Claude Code, run `claude mcp add cairn -- cairn mcp`, or add an `.mcp.json`:
+The fastest path is **`cairn install claude-code`**, which non-destructively wires up the MCP
+server **and** the `SessionStart` + `UserPromptSubmit` hooks (wakeup on start, auto-recall per
+prompt) into `.mcp.json` and `.claude/settings.json`.
+
+To do it by hand: run `claude mcp add cairn -- cairn mcp`, or add an `.mcp.json`:
 
 ```json
 {

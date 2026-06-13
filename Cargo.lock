@@ -233,6 +233,8 @@ dependencies = [
  "cairn-mcp",
  "cairn-store",
  "clap",
+ "serde_json",
+ "tempfile",
  "tokio",
  "tracing-subscriber",
 ]

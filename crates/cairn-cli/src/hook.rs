@@ -1,0 +1,75 @@
+//! Claude Code lifecycle hook handler (`cairn hook <event>`).
+//!
+//! Claude Code invokes the configured command with a JSON payload on stdin and reads JSON on
+//! stdout. We use that to make Cairn work automatically:
+//!
+//! - `SessionStart` injects wakeup memory as additionalContext (never start cold).
+//! - `UserPromptSubmit` injects an assembled, budgeted context block and records the prompt as episodic memory.
+//!
+//! Hooks must never break the agent: any internal error is logged to stderr and we still exit 0.
+
+use anyhow::Result;
+use cairn_api::AppState;
+use cairn_core::{Config, MemoryKind, MemoryTier, NewMemory};
+use serde_json::{json, Value};
+use std::io::Read;
+
+pub fn run(cfg: &Config, event: &str) -> Result<()> {
+    if let Err(e) = run_inner(cfg, event) {
+        eprintln!("cairn hook: {e}");
+    }
+    Ok(())
+}
+
+fn run_inner(cfg: &Config, event: &str) -> Result<()> {
+    let mut input = String::new();
+    let _ = std::io::stdin().read_to_string(&mut input);
+    let payload: Value = serde_json::from_str(input.trim()).unwrap_or(Value::Null);
+
+    let state = AppState::new(cfg)?;
+
+    match event {
+        "SessionStart" => {
+            let mems = state.mem.wakeup(12)?;
+            if mems.is_empty() {
+                return Ok(());
+            }
+            let mut ctx = String::from("Cairn memory — what you already know here:\n");
+            for m in mems {
+                ctx.push_str(&format!("- ({}) {}\n", m.kind.as_str(), m.content));
+            }
+            emit(event, &ctx);
+        }
+        "UserPromptSubmit" => {
+            let prompt = payload.get("prompt").and_then(Value::as_str).unwrap_or("");
+            if prompt.trim().is_empty() {
+                return Ok(());
+            }
+            // Inject prior knowledge relevant to the prompt (assembled before recording the
+            // current prompt, so we surface history rather than echoing the prompt back).
+            let report = state.asm.assemble(prompt, 1200)?;
+            if !report.included.is_empty() {
+                emit(event, &report.context);
+            }
+            // Record the intent as a low-importance episodic memory (dedup handles repeats).
+            let mut nm = NewMemory::new(prompt);
+            nm.kind = Some(MemoryKind::Note);
+            nm.tier = Some(MemoryTier::Episodic);
+            nm.importance = Some(0.3);
+            let _ = state.mem.remember(nm);
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Emit a context-injection payload on stdout per the Claude Code hook contract.
+fn emit(event: &str, context: &str) {
+    let out = json!({
+        "hookSpecificOutput": {
+            "hookEventName": event,
+            "additionalContext": context,
+        }
+    });
+    println!("{out}");
+}
