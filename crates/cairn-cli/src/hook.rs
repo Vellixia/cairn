@@ -3,8 +3,12 @@
 //! Claude Code invokes the configured command with a JSON payload on stdin and reads JSON on
 //! stdout. We use that to make Cairn work automatically:
 //!
-//! - `SessionStart` injects wakeup memory as additionalContext (never start cold).
+//! - `SessionStart` injects wakeup memory as additionalContext (never start cold). It also fires
+//!   after a compaction (`source: "compact"`), so memory survives compaction.
 //! - `UserPromptSubmit` injects an assembled, budgeted context block and records the prompt as episodic memory.
+//! - `PostToolUse` (Edit/Write) runs the silent-corruption guard against the version Cairn recorded
+//!   when the file was read, warning if a large unreplaced deletion slipped in.
+//! - `SessionEnd` consolidates the session's memory across tiers.
 //!
 //! Hooks must never break the agent: any internal error is logged to stderr and we still exit 0.
 
@@ -13,6 +17,7 @@ use cairn_api::AppState;
 use cairn_core::{Config, MemoryKind, MemoryTier, NewMemory};
 use serde_json::{json, Value};
 use std::io::Read;
+use std::path::Path;
 
 pub fn run(cfg: &Config, event: &str) -> Result<()> {
     if let Err(e) = run_inner(cfg, event) {
@@ -57,6 +62,35 @@ fn run_inner(cfg: &Config, event: &str) -> Result<()> {
             nm.tier = Some(MemoryTier::Episodic);
             nm.importance = Some(0.3);
             let _ = state.mem.remember(nm);
+        }
+        "PostToolUse" => {
+            let tool = payload
+                .get("tool_name")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if matches!(tool, "Edit" | "Write" | "MultiEdit" | "NotebookEdit") {
+                if let Some(file) = payload
+                    .get("tool_input")
+                    .and_then(|t| t.get("file_path"))
+                    .and_then(Value::as_str)
+                {
+                    if let Some(report) = state.guard.verify_against_baseline(Path::new(file))? {
+                        if !report.is_clean() {
+                            let ctx = format!(
+                                "⚠ Cairn guard ({:?}): {}. The pre-edit original is retained — recover it with Cairn `expand {}` if this was unintended.",
+                                report.risk,
+                                report.message,
+                                report.baseline_hash.as_deref().unwrap_or("")
+                            );
+                            emit(event, &ctx);
+                        }
+                    }
+                }
+            }
+        }
+        "SessionEnd" => {
+            // Turn the session's transient working memory into durable tiers.
+            let _ = state.mem.consolidate();
         }
         _ => {}
     }

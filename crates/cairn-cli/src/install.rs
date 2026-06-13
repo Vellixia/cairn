@@ -52,23 +52,36 @@ fn install_claude_code(dir: &Path) -> Result<()> {
             .or_insert_with(|| json!({}))
             .as_object_mut()
             .context("settings.json: hooks is not an object")?;
-        add_hook(hooks, "SessionStart", "cairn hook SessionStart");
-        add_hook(hooks, "UserPromptSubmit", "cairn hook UserPromptSubmit");
+        add_hook(hooks, "SessionStart", "cairn hook SessionStart", None);
+        add_hook(
+            hooks,
+            "UserPromptSubmit",
+            "cairn hook UserPromptSubmit",
+            None,
+        );
+        add_hook(
+            hooks,
+            "PostToolUse",
+            "cairn hook PostToolUse",
+            Some("Edit|Write|MultiEdit|NotebookEdit"),
+        );
+        add_hook(hooks, "SessionEnd", "cairn hook SessionEnd", None);
     }
     write_json(&settings_path, &Value::Object(settings))?;
 
     println!("\u{2713} Configured Claude Code:");
     println!("  - {}  (MCP server: cairn)", mcp_path.display());
     println!(
-        "  - {}  (hooks: SessionStart, UserPromptSubmit)",
+        "  - {}  (hooks: SessionStart, UserPromptSubmit, PostToolUse, SessionEnd)",
         settings_path.display()
     );
     println!("\nStart the server with `cairn serve`, then open a Claude Code session here.");
     Ok(())
 }
 
-/// Add a command hook for `event` if an identical one isn't already present.
-fn add_hook(hooks: &mut Map<String, Value>, event: &str, command: &str) {
+/// Add a command hook for `event` (optionally scoped to a tool `matcher`) if an identical one
+/// isn't already present.
+fn add_hook(hooks: &mut Map<String, Value>, event: &str, command: &str, matcher: Option<&str>) {
     let groups = hooks
         .entry(event)
         .or_insert_with(|| json!([]))
@@ -82,7 +95,11 @@ fn add_hook(hooks: &mut Map<String, Value>, event: &str, command: &str) {
         })
     });
     if !already {
-        groups.push(json!({ "hooks": [{ "type": "command", "command": command }] }));
+        let mut group = json!({ "hooks": [{ "type": "command", "command": command }] });
+        if let Some(m) = matcher {
+            group["matcher"] = json!(m);
+        }
+        groups.push(group);
     }
 }
 
@@ -142,6 +159,14 @@ mod tests {
             .count();
         assert_eq!(cairn_count, 1, "cairn hook must be added exactly once");
         assert!(starts.iter().any(|g| g["hooks"][0]["command"] == "echo hi"));
+        assert!(
+            settings["hooks"]["PostToolUse"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|g| g["hooks"][0]["command"] == "cairn hook PostToolUse"),
+            "PostToolUse hook must be installed"
+        );
 
         let mcp: Value =
             serde_json::from_str(&fs::read_to_string(dir.path().join(".mcp.json")).unwrap())
