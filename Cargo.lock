@@ -216,6 +216,7 @@ dependencies = [
  "anyhow",
  "cairn-api",
  "cairn-core",
+ "cairn-mcp",
  "cairn-store",
  "clap",
  "tokio",
@@ -245,6 +246,18 @@ dependencies = [
  "sha2",
  "thiserror 2.0.18",
  "uuid",
+]
+
+[[package]]
+name = "cairn-mcp"
+version = "0.1.0"
+dependencies = [
+ "cairn-context",
+ "cairn-core",
+ "cairn-memory",
+ "cairn-store",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

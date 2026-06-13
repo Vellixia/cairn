@@ -6,6 +6,7 @@ members = [
     "crates/cairn-context",
     "crates/cairn-memory",
     "crates/cairn-api",
+    "crates/cairn-mcp",
     "crates/cairn-cli",
 ]
 
@@ -24,6 +25,7 @@ cairn-store = { path = "crates/cairn-store" }
 cairn-context = { path = "crates/cairn-context" }
 cairn-memory = { path = "crates/cairn-memory" }
 cairn-api = { path = "crates/cairn-api" }
+cairn-mcp = { path = "crates/cairn-mcp" }
 
 # shared third-party deps
 serde = { version = "1", features = ["derive"] }

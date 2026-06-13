@@ -66,6 +66,23 @@ cargo run -p cairn-cli -- serve
 # server + API on http://127.0.0.1:7777
 ```
 
+## Connect an agent (MCP)
+
+Cairn speaks the Model Context Protocol over stdio — point any MCP-capable agent at `cairn mcp`.
+
+For Claude Code, run `claude mcp add cairn -- cairn mcp`, or add an `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "cairn": { "command": "cairn", "args": ["mcp"] }
+  }
+}
+```
+
+Tools exposed: `read`, `expand`, `remember`, `recall`, `wakeup`. During dev, use
+`cargo run -p cairn-cli -- mcp` as the command.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).

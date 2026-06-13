@@ -69,11 +69,15 @@ enum Cmd {
     },
     /// Update the cairn binary in place. (coming soon)
     Update,
+    /// Run the MCP server over stdio (point your agent's MCP config at `cairn mcp`).
+    Mcp,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Log to stderr so `cairn mcp` keeps stdout clean for the JSON-RPC protocol.
     tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_target(false)
         .compact()
         .init();
@@ -143,6 +147,11 @@ async fn main() -> anyhow::Result<()> {
             server.as_deref().unwrap_or("<server>")
         )),
         Cmd::Update => coming_soon("self-updating the cairn binary"),
+        Cmd::Mcp => {
+            // No stdout banner here: stdout is the MCP channel.
+            let server = cairn_mcp::McpServer::new(&cfg)?;
+            server.serve_stdio()?;
+        }
     }
     Ok(())
 }
