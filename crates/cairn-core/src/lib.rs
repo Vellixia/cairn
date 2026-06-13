@@ -11,4 +11,4 @@ pub mod model;
 pub use config::Config;
 pub use error::{Error, Result};
 pub use hash::ContentHash;
-pub use model::{Memory, MemoryKind, MemoryTier, NewMemory};
+pub use model::{DeviceToken, Memory, MemoryKind, MemoryTier, NewMemory};

@@ -13,6 +13,7 @@ use clap::{Parser, Subcommand};
 
 mod hook;
 mod install;
+mod sync;
 
 #[derive(Parser)]
 #[command(
@@ -76,6 +77,34 @@ enum Cmd {
     Mcp,
     /// Internal: handle a Claude Code lifecycle hook event (reads JSON on stdin).
     Hook { event: String },
+    /// Manage device tokens for authenticating other devices to this server.
+    Token {
+        #[command(subcommand)]
+        action: TokenCmd,
+    },
+    /// Sync memory with another Cairn server (last-write-wins).
+    Sync {
+        /// Server base URL, e.g. http://192.168.1.10:7777
+        #[arg(long)]
+        server: String,
+        /// Device token for the remote server (if it requires auth).
+        #[arg(long)]
+        token: Option<String>,
+    },
+    /// Export all memories as JSON (to a file, or stdout if omitted).
+    Export { path: Option<PathBuf> },
+    /// Import memories from a JSON file (last-write-wins).
+    Import { path: PathBuf },
+}
+
+#[derive(Subcommand)]
+enum TokenCmd {
+    /// Create a token for a device (prints the token to stdout).
+    Create { name: String },
+    /// List device tokens.
+    List,
+    /// Revoke a device token.
+    Revoke { token: String },
 }
 
 #[tokio::main]
@@ -150,6 +179,59 @@ async fn main() -> anyhow::Result<()> {
             server.serve_stdio()?;
         }
         Cmd::Hook { event } => hook::run(&cfg, &event)?,
+        Cmd::Token { action } => {
+            let state = AppState::new(&cfg)?;
+            match action {
+                TokenCmd::Create { name } => {
+                    let t = state.store.create_token(&name)?;
+                    println!("{}", t.token);
+                    eprintln!(
+                        "created token for '{}'. /api access now requires a device token.",
+                        t.name
+                    );
+                }
+                TokenCmd::List => {
+                    for t in state.store.list_tokens()? {
+                        println!("{}  {}  {}", t.token, t.name, t.created_at.to_rfc3339());
+                    }
+                }
+                TokenCmd::Revoke { token } => {
+                    if state.store.revoke_token(&token)? {
+                        println!("revoked");
+                    } else {
+                        println!("no such token");
+                    }
+                }
+            }
+        }
+        Cmd::Sync { server, token } => {
+            let state = AppState::new(&cfg)?;
+            sync::run(&state.store, &server, token.as_deref())?;
+        }
+        Cmd::Export { path } => {
+            let state = AppState::new(&cfg)?;
+            let mems = state.store.all_memories()?;
+            let json = serde_json::to_string_pretty(&mems)?;
+            match path {
+                Some(p) => {
+                    std::fs::write(&p, json)?;
+                    println!("exported {} memories to {}", mems.len(), p.display());
+                }
+                None => println!("{json}"),
+            }
+        }
+        Cmd::Import { path } => {
+            let state = AppState::new(&cfg)?;
+            let text = std::fs::read_to_string(&path)?;
+            let mems: Vec<cairn_core::Memory> = serde_json::from_str(&text)?;
+            let mut applied = 0usize;
+            for m in &mems {
+                if state.store.upsert_memory(m)? {
+                    applied += 1;
+                }
+            }
+            println!("imported {applied} of {} memories", mems.len());
+        }
     }
     Ok(())
 }

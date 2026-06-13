@@ -1,1 +1,0 @@
-# Keeps web/out/ present so the binary can embed it. Real assets land here on `npm run build`.

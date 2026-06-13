@@ -7,8 +7,9 @@
 mod ui;
 
 use axum::{
-    extract::{Query, State},
+    extract::{Query, Request, State},
     http::StatusCode,
+    middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -19,6 +20,7 @@ use cairn_core::{Config, Memory, NewMemory};
 use cairn_guard::{Guard, VerifyReport};
 use cairn_memory::{MemoryEngine, ScoredMemory};
 use cairn_store::Store;
+use chrono::{DateTime, Utc};
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -65,7 +67,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/memory/recall", get(recall))
         .route("/api/memory/wakeup", get(wakeup))
         .route("/api/guard/verify", post(verify))
+        .route("/api/sync/pull", get(sync_pull))
+        .route("/api/sync/push", post(sync_push))
         .fallback(static_handler)
+        .layer(middleware::from_fn_with_state(state.clone(), auth))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
@@ -222,6 +227,87 @@ async fn assemble(
     Query(q): Query<AssembleQuery>,
 ) -> Result<Json<AssemblyReport>, ApiError> {
     Ok(Json(s.asm.assemble(&q.q, q.budget.unwrap_or(2000))?))
+}
+
+// ---- sync + auth -------------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct SyncPullQuery {
+    #[serde(default)]
+    since: Option<String>,
+}
+
+async fn sync_pull(
+    State(s): State<AppState>,
+    Query(q): Query<SyncPullQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let since = q
+        .since
+        .as_deref()
+        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|d| d.with_timezone(&Utc))
+        .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).unwrap());
+    let memories = s.store.memories_since(since)?;
+    Ok(Json(json!({
+        "memories": memories,
+        "now": Utc::now().to_rfc3339(),
+    })))
+}
+
+#[derive(Deserialize)]
+struct SyncPushBody {
+    memories: Vec<Memory>,
+}
+
+async fn sync_push(
+    State(s): State<AppState>,
+    Json(b): Json<SyncPushBody>,
+) -> Result<Json<Value>, ApiError> {
+    let mut applied = 0usize;
+    for m in &b.memories {
+        if s.store.upsert_memory(m)? {
+            applied += 1;
+        }
+    }
+    Ok(Json(
+        json!({ "applied": applied, "received": b.memories.len() }),
+    ))
+}
+
+/// Bearer-token auth. The web UI and `/api/health` are always open; other `/api/*` routes require
+/// a valid device token *once any token has been created* (so local-only setups stay friction-free).
+async fn auth(State(s): State<AppState>, req: Request, next: Next) -> Response {
+    let path = req.uri().path();
+    let needs_auth = path.starts_with("/api/") && path != "/api/health";
+    if needs_auth {
+        match s.store.count_tokens() {
+            Ok(0) => {}
+            Ok(_) => {
+                let ok = req
+                    .headers()
+                    .get(axum::http::header::AUTHORIZATION)
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.strip_prefix("Bearer "))
+                    .map(|t| s.store.validate_token(t).unwrap_or(false))
+                    .unwrap_or(false);
+                if !ok {
+                    return (
+                        StatusCode::UNAUTHORIZED,
+                        Json(json!({ "error": "invalid or missing device token" })),
+                    )
+                        .into_response();
+                }
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "auth check failed" })),
+                )
+                    .into_response()
+            }
+        }
+    }
+    next.run(req).await
 }
 
 // ---- error plumbing ----------------------------------------------------------------------------

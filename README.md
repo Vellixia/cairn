@@ -94,6 +94,18 @@ To do it by hand: run `claude mcp add cairn -- cairn mcp`, or add an `.mcp.json`
 Tools exposed: `read`, `expand`, `remember`, `recall`, `wakeup`. During dev, use
 `cargo run -p cairn-cli -- mcp` as the command.
 
+## Multi-device & sync
+
+Run one Cairn server for all your devices, or keep a server per device and sync between them.
+
+- **Tokens:** `cairn token create <name>` prints a device token. Once any token exists, `/api/*`
+  requires `Authorization: Bearer <token>` (the web UI and `/api/health` stay open). Local-only
+  setups need no tokens.
+- **Sync:** `cairn sync --server http://host:7777 --token <token>` pulls remote changes then
+  pushes local ones (last-write-wins on `updated_at`).
+- **Offline move:** `cairn export dump.json` / `cairn import dump.json` copies memory between
+  machines with no network.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).

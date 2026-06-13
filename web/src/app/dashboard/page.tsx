@@ -272,14 +272,18 @@ function DevicesPanel() {
     <div className="grid gap-4">
       <Card title="Add a device">
         <p className="mb-3 text-sm text-slate">
-          Run this on a new machine to install Cairn, pair it to this server, and auto-configure
-          every installed agent:
+          Create a device token on this server, then sync another machine against it:
         </p>
         <code className="block rounded-lg border border-line bg-surface2 px-4 py-3 font-mono text-sm">
-          curl -fsSL https://cairn.sh/i | sh -s -- pair CAIRN-7Q3X
+          cairn token create my-laptop
+        </code>
+        <code className="mt-2 block rounded-lg border border-line bg-surface2 px-4 py-3 font-mono text-sm">
+          cairn sync --server {API_BASE} --token &lt;token&gt;
         </code>
         <p className="mt-3 text-xs text-slate">
-          (Pairing + per-device tokens land in Phase 2; this is the documented flow.)
+          Last-write-wins. Prefer offline? <span className="font-mono">cairn export dump.json</span>{" "}
+          / <span className="font-mono">cairn import dump.json</span>. One-command install + QR
+          pairing is on the roadmap.
         </p>
       </Card>
       <Card title="Connect an agent (MCP)">

@@ -147,3 +147,11 @@ impl NewMemory {
         }
     }
 }
+
+/// A per-device access token for authenticating to a Cairn server.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceToken {
+    pub token: String,
+    pub name: String,
+    pub created_at: DateTime<Utc>,
+}
