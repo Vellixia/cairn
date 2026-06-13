@@ -1,8 +1,8 @@
 //! The Cairn HTTP API and embedded control-plane UI.
 //!
-//! For the thin slice this exposes health/stats plus the context (read/expand) and memory
-//! (remember/recall/wakeup) engines over REST, and serves a small branded page at `/` so the
-//! server is usable the moment it boots. The full Next.js control plane is embedded later.
+//! Exposes health/stats plus the context (read/expand/assemble), memory (remember/recall/wakeup),
+//! and guard (verify) engines over REST, and serves the embedded Next.js control plane — with a
+//! built-in fallback page when the UI hasn't been built.
 
 mod ui;
 

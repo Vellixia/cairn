@@ -1,8 +1,7 @@
 //! The memory engine: persist what matters and surface it again across sessions.
 //!
-//! This is the thin-slice version: dedup on exact content, and recall ranked by keyword overlap +
-//! recency + importance. Hybrid retrieval (BM25 + vectors + graph, RRF) and 4-tier consolidation
-//! land in later phases; the API here is designed to stay stable as those arrive.
+//! Dedup on exact content; recall ranked by BM25 over the corpus, blended with recency and
+//! importance. Vector/graph hybrid retrieval and 4-tier consolidation build on this foundation.
 
 use cairn_core::{ContentHash, Memory, MemoryKind, NewMemory, Result};
 use cairn_store::Store;
