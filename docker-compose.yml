@@ -1,0 +1,24 @@
+# Cairn server — one command to self-host:  docker compose up
+services:
+  cairn:
+    build: .
+    image: cairn:dev
+    container_name: cairn
+    ports:
+      - "7777:7777"
+    volumes:
+      - cairn-data:/data
+    restart: unless-stopped
+
+  # Phase 2: swap the embedded SQLite store for Postgres + pgvector for multi-device.
+  # postgres:
+  #   image: pgvector/pgvector:pg16
+  #   environment:
+  #     POSTGRES_PASSWORD: cairn
+  #     POSTGRES_DB: cairn
+  #   volumes:
+  #     - cairn-pg:/var/lib/postgresql/data
+
+volumes:
+  cairn-data:
+  # cairn-pg:

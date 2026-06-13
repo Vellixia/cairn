@@ -1,0 +1,12 @@
+target
+**/target
+web/node_modules
+web/.next
+web/out
+.git
+.gitignore
+data
+.cairn
+.testdata
+*.db
+*.sqlite
