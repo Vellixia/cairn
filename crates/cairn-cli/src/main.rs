@@ -75,6 +75,12 @@ enum Cmd {
     Update,
     /// Run the MCP server over stdio (point your agent's MCP config at `cairn mcp`).
     Mcp,
+    /// Run a command and print compressed output; the full output is retained and recoverable.
+    Run {
+        /// The command to run, e.g. `cairn run -- cargo test`.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 1..)]
+        command: Vec<String>,
+    },
     /// Internal: handle a Claude Code lifecycle hook event (reads JSON on stdin).
     Hook { event: String },
     /// Manage device tokens for authenticating other devices to this server.
@@ -177,6 +183,31 @@ async fn main() -> anyhow::Result<()> {
             // No stdout banner here: stdout is the MCP channel.
             let server = cairn_mcp::McpServer::new(&cfg)?;
             server.serve_stdio()?;
+        }
+        Cmd::Run { command } => {
+            if command.is_empty() {
+                anyhow::bail!("usage: cairn run -- <command>");
+            }
+            let state = AppState::new(&cfg)?;
+            let output = std::process::Command::new(&command[0])
+                .args(&command[1..])
+                .output()
+                .with_context(|| format!("running `{}`", command.join(" ")))?;
+            let mut combined = String::from_utf8_lossy(&output.stdout).into_owned();
+            combined.push_str(&String::from_utf8_lossy(&output.stderr));
+            let c = state.shell.compress(&command.join(" "), &combined)?;
+            print!("{}", c.output);
+            if !c.output.ends_with('\n') {
+                println!();
+            }
+            eprintln!(
+                "[cairn: {} → {} lines, {:.0}% saved · recover full output with `expand {}`]",
+                c.original_lines,
+                c.compressed_lines,
+                c.saved_ratio * 100.0,
+                c.original_hash
+            );
+            std::process::exit(output.status.code().unwrap_or(0));
         }
         Cmd::Hook { event } => hook::run(&cfg, &event)?,
         Cmd::Token { action } => {

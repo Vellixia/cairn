@@ -19,6 +19,7 @@ use cairn_context::{ContextEngine, ReadMode, ReadResult};
 use cairn_core::{Config, Memory, NewMemory};
 use cairn_guard::{Guard, VerifyReport};
 use cairn_memory::{MemoryEngine, ScoredMemory};
+use cairn_shell::{Compressed, ShellCompressor};
 use cairn_store::Store;
 use chrono::{DateTime, Utc};
 use rust_embed::RustEmbed;
@@ -37,6 +38,7 @@ pub struct AppState {
     pub mem: Arc<MemoryEngine>,
     pub guard: Arc<Guard>,
     pub asm: Arc<Assembler>,
+    pub shell: Arc<ShellCompressor>,
 }
 
 impl AppState {
@@ -46,12 +48,14 @@ impl AppState {
         let mem = Arc::new(MemoryEngine::new(store.clone()));
         let guard = Arc::new(Guard::new(store.clone()));
         let asm = Arc::new(Assembler::new(mem.clone()));
+        let shell = Arc::new(ShellCompressor::new(store.clone()));
         Ok(Self {
             store,
             ctx,
             mem,
             guard,
             asm,
+            shell,
         })
     }
 }
@@ -68,6 +72,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/memory/wakeup", get(wakeup))
         .route("/api/memory/consolidate", post(consolidate_memory))
         .route("/api/guard/verify", post(verify))
+        .route("/api/shell/compress", post(shell_compress))
         .route("/api/sync/pull", get(sync_pull))
         .route("/api/sync/push", post(sync_push))
         .fallback(static_handler)
@@ -232,6 +237,19 @@ async fn assemble(
     Query(q): Query<AssembleQuery>,
 ) -> Result<Json<AssemblyReport>, ApiError> {
     Ok(Json(s.asm.assemble(&q.q, q.budget.unwrap_or(2000))?))
+}
+
+#[derive(Deserialize)]
+struct ShellCompressBody {
+    command: String,
+    output: String,
+}
+
+async fn shell_compress(
+    State(s): State<AppState>,
+    Json(b): Json<ShellCompressBody>,
+) -> Result<Json<Compressed>, ApiError> {
+    Ok(Json(s.shell.compress(&b.command, &b.output)?))
 }
 
 // ---- sync + auth -------------------------------------------------------------------------------

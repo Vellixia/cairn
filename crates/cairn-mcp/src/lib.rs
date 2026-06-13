@@ -12,6 +12,7 @@ use cairn_context::{ContextEngine, ReadMode};
 use cairn_core::{Config, NewMemory, Result};
 use cairn_guard::Guard;
 use cairn_memory::MemoryEngine;
+use cairn_shell::ShellCompressor;
 use cairn_store::Store;
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
@@ -24,6 +25,7 @@ pub struct McpServer {
     ctx: Arc<ContextEngine>,
     guard: Arc<Guard>,
     asm: Arc<Assembler>,
+    shell: Arc<ShellCompressor>,
     mem: Arc<MemoryEngine>,
 }
 
@@ -35,6 +37,7 @@ impl McpServer {
             ctx: Arc::new(ContextEngine::new(store.clone())),
             guard: Arc::new(Guard::new(store.clone())),
             asm: Arc::new(Assembler::new(mem.clone())),
+            shell: Arc::new(ShellCompressor::new(store.clone())),
             mem,
         })
     }
@@ -182,6 +185,15 @@ impl McpServer {
                 }
                 Ok(out)
             }
+            "compress" => {
+                let command = str_arg(args.get("command")).ok_or("missing 'command'")?;
+                let output = str_arg(args.get("output")).ok_or("missing 'output'")?;
+                let c = self
+                    .shell
+                    .compress(command, output)
+                    .map_err(|e| e.to_string())?;
+                serde_json::to_string_pretty(&c).map_err(|e| e.to_string())
+            }
             "consolidate" => {
                 let n = self.mem.consolidate().map_err(|e| e.to_string())?;
                 Ok(format!("consolidated memory: {n} promoted across tiers"))
@@ -276,6 +288,18 @@ fn tool_defs() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": { "limit": { "type": "integer", "minimum": 1 } }
+            }
+        },
+        {
+            "name": "compress",
+            "description": "Compress verbose command/tool output (cargo, git, build logs, listings) into a compact view, retaining the exact original (recover with `expand`).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "command": { "type": "string" },
+                    "output": { "type": "string" }
+                },
+                "required": ["command", "output"]
             }
         },
         {
