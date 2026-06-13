@@ -15,6 +15,7 @@ use axum::{
 };
 use cairn_context::{ContextEngine, ReadMode, ReadResult};
 use cairn_core::{Config, Memory, NewMemory};
+use cairn_guard::{Guard, VerifyReport};
 use cairn_memory::{MemoryEngine, ScoredMemory};
 use cairn_store::Store;
 use serde::Deserialize;
@@ -30,6 +31,7 @@ pub struct AppState {
     pub store: Arc<Store>,
     pub ctx: Arc<ContextEngine>,
     pub mem: Arc<MemoryEngine>,
+    pub guard: Arc<Guard>,
 }
 
 impl AppState {
@@ -37,7 +39,13 @@ impl AppState {
         let store = Arc::new(Store::open(cfg)?);
         let ctx = Arc::new(ContextEngine::new(store.clone()));
         let mem = Arc::new(MemoryEngine::new(store.clone()));
-        Ok(Self { store, ctx, mem })
+        let guard = Arc::new(Guard::new(store.clone()));
+        Ok(Self {
+            store,
+            ctx,
+            mem,
+            guard,
+        })
     }
 }
 
@@ -51,6 +59,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/memory", post(remember))
         .route("/api/memory/recall", get(recall))
         .route("/api/memory/wakeup", get(wakeup))
+        .route("/api/guard/verify", post(verify))
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
@@ -141,6 +150,19 @@ async fn wakeup(
     Query(q): Query<WakeupQuery>,
 ) -> Result<Json<Vec<Memory>>, ApiError> {
     Ok(Json(s.mem.wakeup(q.limit.unwrap_or(12))?))
+}
+
+#[derive(Deserialize)]
+struct VerifyBody {
+    path: String,
+    content: String,
+}
+
+async fn verify(
+    State(s): State<AppState>,
+    Json(b): Json<VerifyBody>,
+) -> Result<Json<VerifyReport>, ApiError> {
+    Ok(Json(s.guard.verify_edit(Path::new(&b.path), &b.content)?))
 }
 
 // ---- error plumbing ----------------------------------------------------------------------------

@@ -11,6 +11,7 @@ cairn-core.workspace = true
 cairn-store.workspace = true
 cairn-context.workspace = true
 cairn-memory.workspace = true
+cairn-guard.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 axum.workspace = true

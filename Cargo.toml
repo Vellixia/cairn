@@ -5,6 +5,7 @@ members = [
     "crates/cairn-store",
     "crates/cairn-context",
     "crates/cairn-memory",
+    "crates/cairn-guard",
     "crates/cairn-api",
     "crates/cairn-mcp",
     "crates/cairn-cli",
@@ -24,6 +25,7 @@ cairn-core = { path = "crates/cairn-core" }
 cairn-store = { path = "crates/cairn-store" }
 cairn-context = { path = "crates/cairn-context" }
 cairn-memory = { path = "crates/cairn-memory" }
+cairn-guard = { path = "crates/cairn-guard" }
 cairn-api = { path = "crates/cairn-api" }
 cairn-mcp = { path = "crates/cairn-mcp" }
 

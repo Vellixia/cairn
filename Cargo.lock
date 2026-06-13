@@ -200,6 +200,7 @@ dependencies = [
  "axum",
  "cairn-context",
  "cairn-core",
+ "cairn-guard",
  "cairn-memory",
  "cairn-store",
  "serde",
@@ -249,11 +250,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "cairn-guard"
+version = "0.1.0"
+dependencies = [
+ "cairn-core",
+ "cairn-store",
+ "serde",
+ "similar",
+ "tempfile",
+]
+
+[[package]]
 name = "cairn-mcp"
 version = "0.1.0"
 dependencies = [
  "cairn-context",
  "cairn-core",
+ "cairn-guard",
  "cairn-memory",
  "cairn-store",
  "serde_json",

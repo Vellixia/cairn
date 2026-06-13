@@ -9,6 +9,7 @@
 
 use cairn_context::{ContextEngine, ReadMode};
 use cairn_core::{Config, NewMemory, Result};
+use cairn_guard::Guard;
 use cairn_memory::MemoryEngine;
 use cairn_store::Store;
 use serde_json::{json, Value};
@@ -20,6 +21,7 @@ const PROTOCOL_VERSION: &str = "2025-06-18";
 
 pub struct McpServer {
     ctx: Arc<ContextEngine>,
+    guard: Arc<Guard>,
     mem: Arc<MemoryEngine>,
 }
 
@@ -28,6 +30,7 @@ impl McpServer {
         let store = Arc::new(Store::open(cfg)?);
         Ok(Self {
             ctx: Arc::new(ContextEngine::new(store.clone())),
+            guard: Arc::new(Guard::new(store.clone())),
             mem: Arc::new(MemoryEngine::new(store)),
         })
     }
@@ -175,6 +178,15 @@ impl McpServer {
                 }
                 Ok(out)
             }
+            "verify" => {
+                let path = str_arg(args.get("path")).ok_or("missing 'path'")?;
+                let content = str_arg(args.get("content")).ok_or("missing 'content'")?;
+                let r = self
+                    .guard
+                    .verify_edit(std::path::Path::new(path), content)
+                    .map_err(|e| e.to_string())?;
+                serde_json::to_string_pretty(&r).map_err(|e| e.to_string())
+            }
             other => Err(format!("unknown tool: {other}")),
         }
     }
@@ -235,6 +247,18 @@ fn tool_defs() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": { "limit": { "type": "integer", "minimum": 1 } }
+            }
+        },
+        {
+            "name": "verify",
+            "description": "Verify a proposed new version of a file against the current one before writing. Flags large, unreplaced deletions (silent corruption) and retains the original so nothing is lost.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "content": { "type": "string", "description": "The proposed new full file content." }
+                },
+                "required": ["path", "content"]
             }
         }
     ])

@@ -1,6 +1,6 @@
 [package]
-name = "cairn-mcp"
-description = "Cairn MCP server (stdio) — connect any MCP-capable agent."
+name = "cairn-guard"
+description = "Cairn active guardrails: verify agent edits against retained originals."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,10 +9,8 @@ repository.workspace = true
 [dependencies]
 cairn-core.workspace = true
 cairn-store.workspace = true
-cairn-context.workspace = true
-cairn-memory.workspace = true
-cairn-guard.workspace = true
-serde_json.workspace = true
+serde.workspace = true
+similar.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
