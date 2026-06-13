@@ -17,7 +17,7 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 authors = ["Cairn contributors"]
-repository = "https://github.com/cairn-dev/cairn"
+repository = "https://github.com/Vellixia/cairn"
 rust-version = "1.80"
 
 [workspace.dependencies]

@@ -1,13 +1,13 @@
 #!/bin/sh
 # Cairn installer (Linux/macOS).
 #
-#   curl -fsSL https://cairn.sh/install.sh | sh
-#   curl -fsSL https://cairn.sh/install.sh | sh -s -- pair CAIRN-XXXX   # install + pair a device
+#   curl -fsSL https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.sh | sh -s -- pair CAIRN-XXXX   # install + pair a device
 #
 # Honors: CAIRN_REPO, CAIRN_INSTALL_DIR.
 set -eu
 
-REPO="${CAIRN_REPO:-cairn-dev/cairn}"
+REPO="${CAIRN_REPO:-Vellixia/cairn}"
 BIN="cairn"
 INSTALL_DIR="${CAIRN_INSTALL_DIR:-$HOME/.local/bin}"
 

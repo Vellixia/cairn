@@ -34,7 +34,7 @@ export default function Home() {
           <span className="text-lg font-semibold tracking-tight">Cairn</span>
         </div>
         <nav className="flex items-center gap-5 text-sm text-slate">
-          <a href="https://github.com/cairn-dev/cairn" className="hover:text-offwhite">GitHub</a>
+          <a href="https://github.com/Vellixia/cairn" className="hover:text-offwhite">GitHub</a>
           <Link href="/dashboard" className="rounded-lg bg-ember px-3.5 py-1.5 font-semibold text-[#1a1206] hover:opacity-90">
             Open dashboard
           </Link>
@@ -54,12 +54,12 @@ export default function Home() {
           tasks — self-hosted, one Rust binary, with <span className="text-offwhite">no context ever lost</span>.
         </p>
         <div className="mx-auto mt-8 flex max-w-xl flex-col gap-3">
-          <Cmd>curl -fsSL https://cairn.sh/install.sh | sh</Cmd>
+          <Cmd>curl -fsSL https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.sh | sh</Cmd>
           <div className="flex justify-center gap-3 text-sm">
             <Link href="/dashboard" className="rounded-lg bg-ember px-4 py-2 font-semibold text-[#1a1206] hover:opacity-90">
               Open the dashboard →
             </Link>
-            <a href="https://github.com/cairn-dev/cairn" className="rounded-lg border border-line px-4 py-2 font-semibold hover:bg-surface">
+            <a href="https://github.com/Vellixia/cairn" className="rounded-lg border border-line px-4 py-2 font-semibold hover:bg-surface">
               Star on GitHub
             </a>
           </div>
@@ -116,13 +116,13 @@ export default function Home() {
               <Cmd>docker compose up</Cmd>
             </div>
             <div>
-              <div className="mb-2 text-xs uppercase tracking-wider text-slate">Each device (from the dashboard)</div>
-              <Cmd>curl -fsSL https://cairn.sh/i | sh -s -- pair CAIRN-7Q3X</Cmd>
+              <div className="mb-2 text-xs uppercase tracking-wider text-slate">Each device</div>
+              <Cmd>cairn token create laptop &amp;&amp; cairn sync --server http://host:7777 --token &lt;t&gt;</Cmd>
             </div>
           </div>
           <p className="mt-4 text-sm text-slate">
-            Pairing auto-detects your agents and wires up Claude Code, Codex, Cursor, OpenCode,
-            Windsurf, and more.
+            Then run <span className="font-mono">cairn install claude-code</span> to wire up the MCP
+            server and hooks. One-command install + QR pairing is on the roadmap.
           </p>
         </div>
       </section>

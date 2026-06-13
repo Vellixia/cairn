@@ -1,11 +1,11 @@
 # Cairn installer (Windows).
 #
-#   irm https://cairn.sh/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.ps1 | iex
 #
 # Honors: $env:CAIRN_REPO, $env:CAIRN_INSTALL_DIR
 $ErrorActionPreference = 'Stop'
 
-$Repo       = if ($env:CAIRN_REPO) { $env:CAIRN_REPO } else { 'cairn-dev/cairn' }
+$Repo       = if ($env:CAIRN_REPO) { $env:CAIRN_REPO } else { 'Vellixia/cairn' }
 $InstallDir = if ($env:CAIRN_INSTALL_DIR) { $env:CAIRN_INSTALL_DIR } else { "$env:LOCALAPPDATA\Cairn\bin" }
 $target     = 'x86_64-pc-windows-msvc'
 

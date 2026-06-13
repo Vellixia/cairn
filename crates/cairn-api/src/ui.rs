@@ -106,7 +106,7 @@ pub const INDEX_HTML: &str = r###"<!doctype html>
 
   <footer>
     🪨 Early development · this page is a placeholder control plane; the full dashboard is coming.
-    &nbsp;·&nbsp; <a href="https://github.com/cairn-dev/cairn">GitHub</a>
+    &nbsp;·&nbsp; <a href="https://github.com/Vellixia/cairn">GitHub</a>
   </footer>
 </div>
 

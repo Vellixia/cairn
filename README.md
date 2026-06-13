@@ -59,6 +59,24 @@ This repo is a Cargo workspace:
 | `cairn-api` | axum REST API + (soon) the web control plane |
 | `cairn-cli` | the `cairn` binary (`serve`, …) |
 
+## Install
+
+```sh
+# Linux / macOS — one-liner (downloads the latest release binary)
+curl -fsSL https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.sh | sh
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.ps1 | iex
+
+# Docker
+docker run -p 7777:7777 -v cairn:/data ghcr.io/vellixia/cairn    # or: docker compose up
+
+# From source
+cargo install --git https://github.com/Vellixia/cairn cairn-cli
+```
+
+Then run `cairn serve` and open <http://127.0.0.1:7777>.
+
 ## Quickstart (dev)
 
 ```sh
