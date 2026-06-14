@@ -16,6 +16,7 @@ mod hook;
 mod install;
 mod pool;
 mod sync;
+mod update;
 
 #[derive(Parser)]
 #[command(
@@ -94,7 +95,7 @@ enum Cmd {
         /// Server URL.
         server: Option<String>,
     },
-    /// Update the cairn binary in place. (coming soon)
+    /// Update the cairn binary in place to the latest GitHub release.
     Update,
     /// Run the MCP server over stdio (point your agent's MCP config at `cairn mcp`).
     Mcp,
@@ -278,7 +279,7 @@ async fn main() -> anyhow::Result<()> {
             "logging in to {}",
             server.as_deref().unwrap_or("<server>")
         )),
-        Cmd::Update => coming_soon("self-updating the cairn binary"),
+        Cmd::Update => update::run()?,
         Cmd::Mcp => {
             // No stdout banner here: stdout is the MCP channel.
             let server = cairn_mcp::McpServer::new(&cfg)?;

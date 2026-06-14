@@ -164,6 +164,7 @@ The `cairn` binary:
 | `cairn import --share <file>` | ingest a shared bundle (tagged `shared`, deduplicated against existing) |
 | `cairn contribute --server <url>` · `cairn pull --server <url>` | federate sanitized knowledge with a shared pool |
 | `cairn bench [path]` | measure the token savings on a codebase (outlines, re-reads, shell) |
+| `cairn update` | self-update the binary to the latest GitHub release |
 | `cairn doctor` | verify the local setup |
 
 ## Multi-device & sync

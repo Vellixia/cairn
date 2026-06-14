@@ -25,6 +25,7 @@ serde_json.workspace = true
 chrono.workspace = true
 ureq.workspace = true
 tracing-subscriber.workspace = true
+self_update = { version = "0.44.0", default-features = false, features = ["ureq", "rustls", "archive-tar", "compression-flate2", "archive-zip", "compression-zip-deflate"] }
 
 [dev-dependencies]
 tempfile.workspace = true
