@@ -94,6 +94,17 @@ impl Guard {
         };
         Ok(Some(assess(&key, &baseline, Some(hash), &current)))
     }
+
+    /// Set the current task anchor — the goal Cairn re-injects at session start to keep the agent
+    /// on track (anti-drift). A single current goal.
+    pub fn set_anchor(&self, goal: &str) -> Result<()> {
+        self.store.set_meta("task_anchor", goal.trim())
+    }
+
+    /// The current task anchor, if one is set.
+    pub fn anchor(&self) -> Result<Option<String>> {
+        self.store.get_meta("task_anchor")
+    }
 }
 
 /// Diff `baseline` → `new_content` and judge the risk of a large, unreplaced deletion.
@@ -228,5 +239,13 @@ mod tests {
         let f2 = dir.path().join("never_read.txt");
         std::fs::write(&f2, "x").unwrap();
         assert!(g.verify_against_baseline(&f2).unwrap().is_none());
+    }
+
+    #[test]
+    fn anchor_set_and_get() {
+        let (g, _dir) = guard();
+        assert!(g.anchor().unwrap().is_none());
+        g.set_anchor("  ship Cairn v0.2  ").unwrap();
+        assert_eq!(g.anchor().unwrap().unwrap(), "ship Cairn v0.2");
     }
 }

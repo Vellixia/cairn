@@ -37,6 +37,9 @@ fn run_inner(cfg: &Config, event: &str) -> Result<()> {
     match event {
         "SessionStart" => {
             let mut ctx = String::new();
+            if let Some(goal) = state.guard.anchor()? {
+                ctx.push_str(&format!("Current task: {goal}\n\n"));
+            }
             let prof = state.profile.block()?;
             if !prof.is_empty() {
                 ctx.push_str(&prof);

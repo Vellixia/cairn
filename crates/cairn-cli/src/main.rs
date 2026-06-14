@@ -57,6 +57,11 @@ enum Cmd {
         #[arg(trailing_var_arg = true, num_args = 1..)]
         rule: Vec<String>,
     },
+    /// Set the current task anchor — the goal re-injected at session start.
+    Anchor {
+        #[arg(trailing_var_arg = true, num_args = 1..)]
+        goal: Vec<String>,
+    },
     /// Show basic stats.
     Stats,
     /// Verify the local setup.
@@ -170,6 +175,12 @@ async fn main() -> anyhow::Result<()> {
             let state = AppState::new(&cfg)?;
             let m = state.profile.prefer(&rule.join(" "))?;
             println!("noted preference: {}", m.content);
+        }
+        Cmd::Anchor { goal } => {
+            let state = AppState::new(&cfg)?;
+            let goal = goal.join(" ");
+            state.guard.set_anchor(&goal)?;
+            println!("task anchor set: {goal}");
         }
         Cmd::Stats => {
             let state = AppState::new(&cfg)?;

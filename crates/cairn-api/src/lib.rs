@@ -76,6 +76,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/memory/wakeup", get(wakeup))
         .route("/api/memory/consolidate", post(consolidate_memory))
         .route("/api/guard/verify", post(verify))
+        .route("/api/guard/anchor", get(get_anchor).post(post_anchor))
         .route("/api/shell/compress", post(shell_compress))
         .route("/api/profile", get(get_profile).post(post_prefer))
         .route("/api/sync/pull", get(sync_pull))
@@ -228,6 +229,23 @@ async fn verify(
     Json(b): Json<VerifyBody>,
 ) -> Result<Json<VerifyReport>, ApiError> {
     Ok(Json(s.guard.verify_edit(Path::new(&b.path), &b.content)?))
+}
+
+async fn get_anchor(State(s): State<AppState>) -> Result<Json<Value>, ApiError> {
+    Ok(Json(json!({ "anchor": s.guard.anchor()? })))
+}
+
+#[derive(Deserialize)]
+struct AnchorBody {
+    goal: String,
+}
+
+async fn post_anchor(
+    State(s): State<AppState>,
+    Json(b): Json<AnchorBody>,
+) -> Result<Json<Value>, ApiError> {
+    s.guard.set_anchor(&b.goal)?;
+    Ok(Json(json!({ "anchor": b.goal })))
 }
 
 #[derive(Deserialize)]

@@ -41,6 +41,8 @@ trait StoreBackend: Send + Sync {
     fn set_last_sync(&self, server: &str, when: DateTime<Utc>) -> Result<()>;
     fn record_file_version(&self, path: &str, content_hash: &str, lines: i64) -> Result<()>;
     fn latest_file_version(&self, path: &str) -> Result<Option<(String, i64)>>;
+    fn set_meta(&self, key: &str, value: &str) -> Result<()>;
+    fn get_meta(&self, key: &str) -> Result<Option<String>>;
 }
 
 /// The structured store plus the content-addressed blob store. Backend-agnostic public API.
@@ -114,6 +116,12 @@ impl Store {
     pub fn latest_file_version(&self, path: &str) -> Result<Option<(String, i64)>> {
         self.backend.latest_file_version(path)
     }
+    pub fn set_meta(&self, key: &str, value: &str) -> Result<()> {
+        self.backend.set_meta(key, value)
+    }
+    pub fn get_meta(&self, key: &str) -> Result<Option<String>> {
+        self.backend.get_meta(key)
+    }
 }
 
 /// Embedded SQLite backend — the default; zero external services, ideal for dev/tests/CI.
@@ -164,6 +172,10 @@ impl SqliteBackend {
                 content_hash TEXT NOT NULL,
                 lines INTEGER NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             );",
         )
         .map_err(stor)?;
@@ -407,6 +419,26 @@ impl StoreBackend for SqliteBackend {
         .optional()
         .map_err(stor)
     }
+
+    fn set_meta(&self, key: &str, value: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO meta (key,value) VALUES (?1,?2)
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            params![key, value],
+        )
+        .map_err(stor)?;
+        Ok(())
+    }
+
+    fn get_meta(&self, key: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row("SELECT value FROM meta WHERE key=?1", params![key], |r| {
+            r.get(0)
+        })
+        .optional()
+        .map_err(stor)
+    }
 }
 
 fn row_to_memory(row: &rusqlite::Row) -> rusqlite::Result<Memory> {
@@ -520,6 +552,19 @@ mod tests {
         s.set_last_sync("https://x", now).unwrap();
         let got = s.get_last_sync("https://x").unwrap().unwrap();
         assert!((got - now).num_seconds().abs() < 2);
+    }
+
+    #[test]
+    fn meta_roundtrips_and_overwrites() {
+        let (s, _d) = store();
+        assert!(s.get_meta("task_anchor").unwrap().is_none());
+        s.set_meta("task_anchor", "ship the release").unwrap();
+        assert_eq!(
+            s.get_meta("task_anchor").unwrap().unwrap(),
+            "ship the release"
+        );
+        s.set_meta("task_anchor", "fix the bug").unwrap();
+        assert_eq!(s.get_meta("task_anchor").unwrap().unwrap(), "fix the bug");
     }
 
     #[test]

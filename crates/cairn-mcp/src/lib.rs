@@ -5,7 +5,8 @@
 //! hand-roll it to avoid taking a heavy SDK dependency this early; the surface is small and the
 //! protocol is stable.
 //!
-//! Tools exposed: `read`, `expand`, `remember`, `recall`, `wakeup`.
+//! Tools exposed: read/expand, remember/recall/wakeup/consolidate, assemble, prefer/profile,
+//! anchor, verify, compress.
 
 use cairn_assemble::Assembler;
 use cairn_context::{ContextEngine, ReadMode};
@@ -188,6 +189,17 @@ impl McpServer {
                 }
                 Ok(out)
             }
+            "anchor" => match str_arg(args.get("goal")) {
+                Some(goal) => {
+                    self.guard.set_anchor(goal).map_err(|e| e.to_string())?;
+                    Ok(format!("task anchor set: {goal}"))
+                }
+                None => Ok(self
+                    .guard
+                    .anchor()
+                    .map_err(|e| e.to_string())?
+                    .unwrap_or_else(|| "(no task anchor set)".to_string())),
+            },
             "prefer" => {
                 let rule = str_arg(args.get("rule")).ok_or("missing 'rule'")?;
                 let m = self.profile.prefer(rule).map_err(|e| e.to_string())?;
@@ -304,6 +316,14 @@ fn tool_defs() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": { "limit": { "type": "integer", "minimum": 1 } }
+            }
+        },
+        {
+            "name": "anchor",
+            "description": "Set or read the current task anchor — the goal Cairn re-injects at session start to keep you on track. Pass `goal` to set; omit to read the current goal.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "goal": { "type": "string" } }
             }
         },
         {
