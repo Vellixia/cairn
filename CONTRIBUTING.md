@@ -39,14 +39,16 @@ cargo test --workspace
 | Crate | Role |
 |---|---|
 | `cairn-core` | domain types, hashing, config |
-| `cairn-store` | SQLite + content-hash blob store |
+| `cairn-store` | pluggable backend (SQLite today) + content-hash blob store |
 | `cairn-context` | cached reads + byte-identical `expand` |
-| `cairn-memory` | remember / recall (BM25) / wakeup |
+| `cairn-memory` | remember · BM25 recall · wakeup · decay · 4-tier consolidation |
 | `cairn-assemble` | token-budgeted, edge-ordered context assembler |
-| `cairn-guard` | verify edits vs retained originals |
+| `cairn-guard` | verify edits vs originals · task anchor · checkpoint/rollback |
+| `cairn-shell` | RTK-style command-output compression (lossless via `expand`) |
+| `cairn-profile` | preference learning |
 | `cairn-api` | axum REST API + embedded web UI |
 | `cairn-mcp` | MCP server (stdio) |
-| `cairn-cli` | the `cairn` binary (serve, mcp, hook, install, …) |
+| `cairn-cli` | the `cairn` binary (serve, mcp, run, hook, install, …) |
 
 ## License
 

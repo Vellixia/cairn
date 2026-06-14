@@ -7,7 +7,7 @@
 ### The open-source context & reliability layer for AI agents
 
 **Make any model smart.** Remember everything · feed less, not more · stay reliable on long
-tasks · get smarter together — self-hosted, one Rust binary, with no context ever lost.
+tasks · get smarter together — self-hosted, with no context ever lost.
 
 </div>
 
@@ -41,25 +41,32 @@ time**. Cairn fixes that.
    a compact view + a handle.
 3. **Assemble lean context** — fight context rot by feeding *less*, higher-signal, well-ordered
    context under a token budget.
-4. **Stay reliable** — verify agent edits against retained originals, detect drift, and re-anchor
-   long tasks (active guardrails).
+4. **Stay reliable** — verify agent edits against retained originals, snapshot/rollback tracked
+   files, and keep a task anchor on long tasks (active guardrails).
 5. **Get smarter together** — learn your preferences and opt into a sanitized, federated
    **collective knowledge** pool so cheap/small models behave like senior, personalized engineers.
 
 ## Status
 
-🚧 Early development. See [the design plan](docs/PLAN.md) for the full architecture and roadmap.
+🚧 Active development — the engine is functional today (memory, no-loss compression, context
+assembly, edit guardrails, shell compression, preference learning, multi-device sync). Vectors +
+graph (HelixDB) and collective knowledge are next; see [the design plan](docs/PLAN.md).
 
 This repo is a Cargo workspace:
 
 | Crate | Role |
 |---|---|
 | `cairn-core` | shared domain types, hashing, config |
-| `cairn-store` | SQLite + content-hash blob store (full-fidelity originals) |
-| `cairn-context` | file reads with cache + byte-identical `expand` (the re-read killer) |
-| `cairn-memory` | remember / recall / wakeup across sessions |
-| `cairn-api` | axum REST API + (soon) the web control plane |
-| `cairn-cli` | the `cairn` binary (`serve`, …) |
+| `cairn-store` | pluggable backend (SQLite today) + content-hash blob store |
+| `cairn-context` | cached file reads + byte-identical `expand` (the re-read killer) |
+| `cairn-memory` | remember · BM25 recall · wakeup · Ebbinghaus decay · 4-tier consolidation |
+| `cairn-assemble` | token-budgeted, edge-ordered context assembler (anti-rot) |
+| `cairn-guard` | verify edits vs originals · task anchor · checkpoint/rollback |
+| `cairn-shell` | RTK-style command-output compression (lossless via `expand`) |
+| `cairn-profile` | preference learning — inject how you work |
+| `cairn-mcp` | MCP server (stdio) |
+| `cairn-api` | axum REST API + embedded web UI |
+| `cairn-cli` | the `cairn` binary (serve, mcp, run, hook, install, …) |
 
 ## Install
 
@@ -98,8 +105,10 @@ cd web && npm install && npm run dev   # http://localhost:3000 (talks to the API
 Cairn speaks the Model Context Protocol over stdio — point any MCP-capable agent at `cairn mcp`.
 
 The fastest path is **`cairn install claude-code`**, which non-destructively wires up the MCP
-server **and** the `SessionStart` + `UserPromptSubmit` hooks (wakeup on start, auto-recall per
-prompt) into `.mcp.json` and `.claude/settings.json`.
+server **and** the lifecycle hooks into `.mcp.json` and `.claude/settings.json`:
+`SessionStart` injects your preferences + memory + current task; `UserPromptSubmit` assembles
+relevant context and learns preferences; `PostToolUse` guards edits against silent corruption;
+`SessionEnd` consolidates memory.
 
 To do it by hand: run `claude mcp add cairn -- cairn mcp`, or add an `.mcp.json`:
 
@@ -111,8 +120,27 @@ To do it by hand: run `claude mcp add cairn -- cairn mcp`, or add an `.mcp.json`
 }
 ```
 
-Tools exposed: `read`, `expand`, `remember`, `recall`, `wakeup`. During dev, use
-`cargo run -p cairn-cli -- mcp` as the command.
+Tools exposed: `read`, `expand`, `remember`, `recall`, `wakeup`, `consolidate`, `assemble`,
+`prefer`, `profile`, `anchor`, `checkpoint`, `rollback`, `checkpoints`, `verify`, `compress`.
+During dev, use `cargo run -p cairn-cli -- mcp` as the command.
+
+## Commands
+
+The `cairn` binary:
+
+| Command | What it does |
+|---|---|
+| `cairn serve` | start the server + embedded web UI (`http://127.0.0.1:7777`) |
+| `cairn mcp` | run the MCP server over stdio (for agents) |
+| `cairn install claude-code` | wire up MCP + lifecycle hooks for Claude Code |
+| `cairn run -- <cmd>` | run a command, print **compressed** output (full output retained) |
+| `cairn remember <text>` · `cairn recall <query>` | store / search memory |
+| `cairn prefer <rule>` | record a standing preference (e.g. `cairn prefer always use ripgrep`) |
+| `cairn anchor <goal>` | set the current task goal (re-injected at session start) |
+| `cairn checkpoint [label]` · `cairn rollback <id>` · `cairn checkpoints` | snapshot / restore tracked files |
+| `cairn token create <name>` · `cairn sync --server <url> --token <t>` | device tokens · multi-device sync |
+| `cairn export <file>` · `cairn import <file>` | move memory between machines offline |
+| `cairn doctor` | verify the local setup |
 
 ## Multi-device & sync
 
