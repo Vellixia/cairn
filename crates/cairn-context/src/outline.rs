@@ -4,8 +4,8 @@
 //! `expand` away.
 //!
 //! Backed by [`tree_sitter`] (real parsing, not regex/heuristics). Supported today: Rust, Python,
-//! JavaScript, TypeScript/TSX, Go. The [`LangSpec`] table makes adding a language a matter of
-//! listing its node kinds — no new traversal logic.
+//! JavaScript, TypeScript/TSX, Go, C, C++, Java, C#, Ruby, Bash. The [`LangSpec`] table makes
+//! adding a language a matter of listing its node kinds — no new traversal logic.
 
 use std::path::Path;
 use tree_sitter::{Language, Node, Parser};
@@ -152,6 +152,115 @@ fn go_spec() -> LangSpec {
     }
 }
 
+fn c_spec() -> LangSpec {
+    LangSpec {
+        language: tree_sitter_c::LANGUAGE.into(),
+        name: "c",
+        sig_kinds: &[
+            "function_definition",
+            "struct_specifier",
+            "enum_specifier",
+            "union_specifier",
+        ],
+        container_kinds: &[],
+        transparent_kinds: &[],
+        body_kinds: &[
+            "compound_statement",
+            "field_declaration_list",
+            "enumerator_list",
+        ],
+    }
+}
+
+fn cpp_spec() -> LangSpec {
+    LangSpec {
+        language: tree_sitter_cpp::LANGUAGE.into(),
+        name: "cpp",
+        sig_kinds: &[
+            "function_definition",
+            "class_specifier",
+            "struct_specifier",
+            "enum_specifier",
+            "union_specifier",
+            "namespace_definition",
+        ],
+        container_kinds: &["namespace_definition"],
+        transparent_kinds: &[],
+        body_kinds: &[
+            "compound_statement",
+            "field_declaration_list",
+            "enumerator_list",
+            "declaration_list",
+        ],
+    }
+}
+
+fn java_spec() -> LangSpec {
+    LangSpec {
+        language: tree_sitter_java::LANGUAGE.into(),
+        name: "java",
+        sig_kinds: &[
+            "class_declaration",
+            "interface_declaration",
+            "enum_declaration",
+            "record_declaration",
+            "method_declaration",
+            "constructor_declaration",
+        ],
+        container_kinds: &["class_declaration", "interface_declaration"],
+        transparent_kinds: &[],
+        body_kinds: &["block", "class_body", "interface_body", "constructor_body"],
+    }
+}
+
+fn csharp_spec() -> LangSpec {
+    LangSpec {
+        language: tree_sitter_c_sharp::LANGUAGE.into(),
+        name: "csharp",
+        sig_kinds: &[
+            "class_declaration",
+            "interface_declaration",
+            "struct_declaration",
+            "enum_declaration",
+            "record_declaration",
+            "namespace_declaration",
+            "method_declaration",
+            "property_declaration",
+            "constructor_declaration",
+        ],
+        container_kinds: &[
+            "class_declaration",
+            "interface_declaration",
+            "struct_declaration",
+            "namespace_declaration",
+        ],
+        transparent_kinds: &[],
+        body_kinds: &["block", "declaration_list", "accessor_list"],
+    }
+}
+
+fn ruby_spec() -> LangSpec {
+    LangSpec {
+        language: tree_sitter_ruby::LANGUAGE.into(),
+        name: "ruby",
+        sig_kinds: &["method", "singleton_method", "class", "module"],
+        container_kinds: &["class", "module"],
+        transparent_kinds: &[],
+        body_kinds: &["body_statement"],
+    }
+}
+
+fn bash_spec() -> LangSpec {
+    LangSpec {
+        language: tree_sitter_bash::LANGUAGE.into(),
+        name: "bash",
+        sig_kinds: &["function_definition"],
+        container_kinds: &[],
+        transparent_kinds: &[],
+        body_kinds: &["compound_statement"],
+    }
+}
+
 fn spec_for_path(path: &Path) -> Option<LangSpec> {
     match path.extension().and_then(|e| e.to_str()) {
         Some("rs") => Some(rust_spec()),
@@ -160,6 +269,13 @@ fn spec_for_path(path: &Path) -> Option<LangSpec> {
         Some("ts" | "mts" | "cts") => Some(typescript_spec(false)),
         Some("tsx") => Some(typescript_spec(true)),
         Some("go") => Some(go_spec()),
+        Some("c") => Some(c_spec()),
+        // `.h` goes to the C++ grammar: it parses C headers fine and also handles C++ classes.
+        Some("cpp" | "cc" | "cxx" | "c++" | "hpp" | "hh" | "hxx" | "h") => Some(cpp_spec()),
+        Some("java") => Some(java_spec()),
+        Some("cs") => Some(csharp_spec()),
+        Some("rb") => Some(ruby_spec()),
+        Some("sh" | "bash") => Some(bash_spec()),
         _ => None,
     }
 }
@@ -456,6 +572,136 @@ func (p Point) Norm() float64 { return 0 }
         assert!(o.contains("func (p Point) Norm() float64"));
         assert!(!o.contains("X int")); // struct fields elided
         assert!(!o.contains("return 0")); // bodies elided
+    }
+
+    #[test]
+    fn c_outline_covers_functions_structs_enums() {
+        let src = "\
+int add(int a, int b) {
+    return a + b;
+}
+
+struct Point {
+    int x;
+    int y;
+};
+
+enum Color { RED, GREEN };
+";
+        let o = text("m.c", src);
+        assert!(o.contains("int add(int a, int b)"));
+        assert!(o.contains("struct Point"));
+        assert!(o.contains("enum Color"));
+        assert!(!o.contains("return a + b"));
+        assert!(!o.contains("int x;"));
+    }
+
+    #[test]
+    fn cpp_outline_covers_classes_namespaces_functions() {
+        let src = "\
+class Widget {
+public:
+    int id;
+    void render();
+};
+
+int compute(int n) { return n * 2; }
+
+namespace ns {
+    void helper() {}
+}
+";
+        let o = text("m.cpp", src);
+        assert!(o.contains("class Widget"));
+        assert!(o.contains("int compute(int n)"));
+        assert!(o.contains("namespace ns"));
+        assert!(o.contains("void helper()")); // namespace member (descended)
+        assert!(!o.contains("return n * 2"));
+    }
+
+    #[test]
+    fn java_outline_covers_classes_interfaces_methods() {
+        let src = "\
+public class Foo {
+    private int x;
+    public int get() {
+        return x;
+    }
+}
+
+interface Bar {
+    void run();
+}
+";
+        let o = text("M.java", src);
+        assert!(o.contains("public class Foo"));
+        assert!(o.contains("public int get()"));
+        assert!(o.contains("interface Bar"));
+        assert!(o.contains("void run();"));
+        assert!(!o.contains("return x"));
+        assert!(!o.contains("private int x")); // field elided
+    }
+
+    #[test]
+    fn csharp_outline_covers_classes_properties_methods() {
+        let src = "\
+public class Svc {
+    public int Id { get; set; }
+    public void Run() {}
+}
+
+interface IThing {
+    void M();
+}
+";
+        let o = text("S.cs", src);
+        assert!(o.contains("public class Svc"));
+        assert!(o.contains("public int Id")); // property
+        assert!(o.contains("public void Run()"));
+        assert!(o.contains("interface IThing"));
+        assert!(o.contains("void M()"));
+    }
+
+    #[test]
+    fn ruby_outline_covers_classes_methods_modules() {
+        let src = "\
+class Animal
+  def speak
+    \"...\"
+  end
+  def legs(n)
+    n
+  end
+end
+
+module Helpers
+  def self.run
+  end
+end
+";
+        let o = text("a.rb", src);
+        assert!(o.contains("class Animal"));
+        assert!(o.contains("def speak"));
+        assert!(o.contains("def legs(n)"));
+        assert!(o.contains("module Helpers"));
+        assert!(!o.contains("\"...\""));
+    }
+
+    #[test]
+    fn bash_outline_covers_functions() {
+        let src = "\
+function greet() {
+  echo hello
+}
+
+run() {
+  echo running
+}
+";
+        let o = text("s.sh", src);
+        assert!(o.contains("greet"));
+        assert!(o.contains("run"));
+        assert!(!o.contains("echo hello"));
     }
 
     #[test]

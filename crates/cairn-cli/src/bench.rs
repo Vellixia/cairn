@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 
 /// Extensions Cairn can outline (matches the `cairn-context` language set).
 const CODE_EXTS: &[&str] = &[
-    "rs", "py", "pyi", "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx", "go",
+    "rs", "py", "pyi", "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx", "go", "c", "cpp",
+    "cc", "cxx", "c++", "h", "hpp", "hh", "hxx", "java", "cs", "rb", "sh", "bash",
 ];
 /// Directories we never descend into.
 const SKIP_DIRS: &[&str] = &[

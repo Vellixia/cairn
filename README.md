@@ -71,7 +71,7 @@ This repo is a Cargo workspace:
 |---|---|
 | `cairn-core` | shared domain types, hashing, config |
 | `cairn-store` | pluggable backend (SQLite today) + content-hash blob store |
-| `cairn-context` | cached reads · AST signature outlines (Rust/Python/JS/TS/Go) · byte-identical `expand` |
+| `cairn-context` | cached reads · AST signature outlines (11 languages) · byte-identical `expand` |
 | `cairn-memory` | remember · BM25 recall · wakeup · Ebbinghaus decay · 4-tier consolidation |
 | `cairn-assemble` | token-budgeted, edge-ordered context assembler (anti-rot) |
 | `cairn-guard` | verify edits vs originals · task anchor · checkpoint/rollback · reliability score |
