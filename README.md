@@ -156,6 +156,11 @@ server **and** the lifecycle hooks into `.mcp.json` and `.claude/settings.json`:
 relevant context and learns preferences; `PostToolUse` guards edits against silent corruption;
 `SessionEnd` consolidates memory.
 
+**Claude Code — one-step plugin:** instead of `cairn install`, run `/plugin marketplace add
+Vellixia/Cairn` then `/plugin install cairn@cairn` to bundle the MCP server, all four lifecycle
+hooks, slash commands (`/cairn:recall`, `/cairn:remember`, `/cairn:sanitize`, `/cairn:bench`), and
+usage guidance in a single install. (Install the `cairn` binary first.)
+
 Using another editor? `cairn install cursor`, `cairn install vscode`, and `cairn install windsurf`
 each wire up the MCP server in that agent's own config format (MCP only — they have no hook
 system). Or run **`cairn install --all`** to auto-detect every agent present and configure each.
