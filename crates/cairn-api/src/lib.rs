@@ -1,8 +1,8 @@
 //! The Cairn HTTP API and embedded control-plane UI.
 //!
 //! Exposes health/stats plus the context (read/expand/assemble), memory (remember/recall/wakeup),
-//! and guard (verify) engines over REST, and serves the embedded Next.js control plane — with a
-//! built-in fallback page when the UI hasn't been built.
+//! and guard (verify, anchor, checkpoint/rollback) engines over REST, and serves the embedded
+//! Next.js control plane — with a built-in fallback page when the UI hasn't been built.
 
 mod ui;
 
@@ -17,7 +17,7 @@ use axum::{
 use cairn_assemble::{Assembler, AssemblyReport};
 use cairn_context::{ContextEngine, ReadMode, ReadResult};
 use cairn_core::{Config, Memory, NewMemory};
-use cairn_guard::{Guard, VerifyReport};
+use cairn_guard::{Checkpoint, Guard, RollbackReport, VerifyReport};
 use cairn_memory::{MemoryEngine, ScoredMemory};
 use cairn_profile::Profile;
 use cairn_shell::{Compressed, ShellCompressor};
@@ -77,6 +77,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/memory/consolidate", post(consolidate_memory))
         .route("/api/guard/verify", post(verify))
         .route("/api/guard/anchor", get(get_anchor).post(post_anchor))
+        .route("/api/guard/checkpoint", post(create_checkpoint))
+        .route("/api/guard/checkpoints", get(list_checkpoints))
+        .route("/api/guard/rollback", post(rollback_checkpoint))
         .route("/api/shell/compress", post(shell_compress))
         .route("/api/profile", get(get_profile).post(post_prefer))
         .route("/api/sync/pull", get(sync_pull))
@@ -147,7 +150,12 @@ async fn health() -> Json<Value> {
 }
 
 async fn stats(State(s): State<AppState>) -> Result<Json<Value>, ApiError> {
-    Ok(Json(json!({ "memories": s.store.count_memories()? })))
+    Ok(Json(json!({
+        "memories": s.store.count_memories()?,
+        "checkpoints": s.guard.list_checkpoints()?.len(),
+        "preferences": s.profile.preferences()?.len(),
+        "anchor": s.guard.anchor()?,
+    })))
 }
 
 #[derive(Deserialize)]
@@ -246,6 +254,36 @@ async fn post_anchor(
 ) -> Result<Json<Value>, ApiError> {
     s.guard.set_anchor(&b.goal)?;
     Ok(Json(json!({ "anchor": b.goal })))
+}
+
+#[derive(Deserialize)]
+struct CheckpointQuery {
+    #[serde(default)]
+    label: Option<String>,
+}
+
+async fn create_checkpoint(
+    State(s): State<AppState>,
+    Query(q): Query<CheckpointQuery>,
+) -> Result<Json<Checkpoint>, ApiError> {
+    let label = q.label.unwrap_or_else(|| "checkpoint".to_string());
+    Ok(Json(s.guard.checkpoint(&label)?))
+}
+
+async fn list_checkpoints(State(s): State<AppState>) -> Result<Json<Vec<Checkpoint>>, ApiError> {
+    Ok(Json(s.guard.list_checkpoints()?))
+}
+
+#[derive(Deserialize)]
+struct RollbackQuery {
+    id: String,
+}
+
+async fn rollback_checkpoint(
+    State(s): State<AppState>,
+    Query(q): Query<RollbackQuery>,
+) -> Result<Json<RollbackReport>, ApiError> {
+    Ok(Json(s.guard.rollback(&q.id)?))
 }
 
 #[derive(Deserialize)]
@@ -375,6 +413,7 @@ async fn auth(State(s): State<AppState>, req: Request, next: Next) -> Response {
 // ---- error plumbing ----------------------------------------------------------------------------
 
 /// A simple API error that renders as JSON `{ "error": ... }`.
+#[derive(Debug)]
 struct ApiError(StatusCode, String);
 
 impl IntoResponse for ApiError {
@@ -413,5 +452,78 @@ mod tests {
     async fn root_serves_ok() {
         let resp = static_handler("/".parse().unwrap()).await;
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    fn test_state() -> (AppState, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = Config::resolve(Some(dir.path().join("data"))).unwrap();
+        (AppState::new(&cfg).unwrap(), dir)
+    }
+
+    #[tokio::test]
+    async fn guard_checkpoint_rollback_endpoints_restore_a_tracked_file() {
+        let (state, dir) = test_state();
+        let file = dir.path().join("work.txt");
+        std::fs::write(&file, "original\n").unwrap();
+        // Track the file by reading it through the context engine (records a baseline version).
+        state.ctx.read(&file, ReadMode::Full).unwrap();
+
+        // Create a checkpoint — it should capture the tracked file.
+        let cp = create_checkpoint(
+            State(state.clone()),
+            Query(CheckpointQuery {
+                label: Some("api".into()),
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(cp.label, "api");
+        assert!(cp.files >= 1, "checkpoint should track the file");
+
+        // It shows up in the list and in stats.
+        let list = list_checkpoints(State(state.clone())).await.unwrap().0;
+        assert!(list.iter().any(|c| c.id == cp.id));
+        let st = stats(State(state.clone())).await.unwrap().0;
+        assert!(st["checkpoints"].as_u64().unwrap() >= 1);
+
+        // Corrupt the file, then roll back to the checkpoint.
+        std::fs::write(&file, "DAMAGED\n").unwrap();
+        let report = rollback_checkpoint(
+            State(state.clone()),
+            Query(RollbackQuery { id: cp.id.clone() }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(report.restored.len(), 1);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "original\n");
+
+        // Unknown checkpoint id surfaces as a 404.
+        let err = rollback_checkpoint(
+            State(state.clone()),
+            Query(RollbackQuery { id: "nope".into() }),
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn anchor_endpoints_round_trip() {
+        let (state, _dir) = test_state();
+        let set = post_anchor(
+            State(state.clone()),
+            Json(AnchorBody {
+                goal: "ship the API".into(),
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(set["anchor"], "ship the API");
+        let got = get_anchor(State(state.clone())).await.unwrap().0;
+        assert_eq!(got["anchor"], "ship the API");
     }
 }
