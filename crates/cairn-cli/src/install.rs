@@ -86,17 +86,17 @@ fn detect(id: &str, project: &Path, home: Option<&Path>) -> bool {
 
 fn install_agent(id: &str, project: &Path, home: Option<&Path>) -> Result<()> {
     match id {
-        "claude-code" => install_claude_code(project),
+        "claude-code" => install_claude_code(project)?,
         "cursor" => install_mcp_only(
             "Cursor",
             &project.join(".cursor").join("mcp.json"),
             "mcpServers",
-        ),
+        )?,
         "vscode" => install_mcp_only(
             "VS Code",
             &project.join(".vscode").join("mcp.json"),
             "servers",
-        ),
+        )?,
         "windsurf" => {
             let home = home.context("cannot locate your home directory for the Windsurf config")?;
             install_mcp_only(
@@ -106,10 +106,13 @@ fn install_agent(id: &str, project: &Path, home: Option<&Path>) -> Result<()> {
                     .join("windsurf")
                     .join("mcp_config.json"),
                 "mcpServers",
-            )
+            )?
         }
         other => bail!("unknown agent '{other}'. Supported: {}.", KNOWN.join(", ")),
     }
+    // Registering the MCP server isn't enough — also tell the model to *use* Cairn's tools.
+    crate::rules::write_for(id, project)?;
+    Ok(())
 }
 
 /// The MCP server entry every agent points at.

@@ -16,6 +16,7 @@ mod hook;
 mod install;
 mod pair;
 mod pool;
+mod rules;
 mod sync;
 mod update;
 
@@ -97,6 +98,14 @@ enum Cmd {
         /// Agent name: claude-code, cursor, vscode, windsurf. Omit (with --all) to auto-detect.
         agent: Option<String>,
         /// Configure every detected agent.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Write per-agent instruction files that tell the model to use Cairn's tools.
+    Rules {
+        /// Agent: claude-code, cursor, vscode, windsurf, agents. Omit with --all.
+        agent: Option<String>,
+        /// Write rules for every supported agent.
         #[arg(long)]
         all: bool,
     },
@@ -301,6 +310,7 @@ async fn main() -> anyhow::Result<()> {
             pair::generate(&state, name.as_deref())?;
         }
         Cmd::Install { agent, all } => install::run(agent.as_deref(), all)?,
+        Cmd::Rules { agent, all } => rules::run(agent.as_deref(), all)?,
         Cmd::Login { server } => coming_soon(&format!(
             "logging in to {}",
             server.as_deref().unwrap_or("<server>")

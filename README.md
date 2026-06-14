@@ -184,7 +184,8 @@ The `cairn` binary:
 |---|---|
 | `cairn serve` | start the server + embedded web UI (`http://127.0.0.1:7777`) |
 | `cairn mcp` | run the MCP server over stdio (for agents) |
-| `cairn install [agent]` · `cairn install --all` | wire up MCP (+ hooks for Claude Code); `--all` auto-detects |
+| `cairn install [agent]` · `cairn install --all` | wire up MCP + an instructions file (+ hooks for Claude Code); `--all` auto-detects |
+| `cairn rules [agent]` · `cairn rules --all` | (re)write the per-agent instructions that tell the model to use Cairn's tools |
 | `cairn run -- <cmd>` | run a command, print **compressed** output (full output retained) |
 | `cairn remember <text>` · `cairn recall <query>` | store / search memory |
 | `cairn prefer <rule>` | record a standing preference (e.g. `cairn prefer always use ripgrep`) |
