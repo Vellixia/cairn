@@ -5,7 +5,7 @@ const PILLARS = [
   { title: "Remember", body: "Decisions, tasks, and rationale persist across sessions, devices, and agents. Never start cold." },
   { title: "Compress — no loss", body: "Files, shell output, and responses shrink in the window but stay byte-identical recoverable on demand." },
   { title: "Assemble lean context", body: "Fight context rot: feed less, higher-signal, well-ordered context under a token budget." },
-  { title: "Stay reliable", body: "Verify agent edits against the retained originals, detect drift, and re-anchor long tasks." },
+  { title: "Stay reliable", body: "Verify agent edits against the retained originals, snapshot & roll back, and track a live reliability score." },
   { title: "Smarter together", body: "Learn your preferences and opt into sanitized, federated collective knowledge." },
 ];
 
@@ -34,7 +34,7 @@ export default function Home() {
           <span className="text-lg font-semibold tracking-tight">Cairn</span>
         </div>
         <nav className="flex items-center gap-5 text-sm text-slate">
-          <a href="https://github.com/Vellixia/cairn" className="hover:text-offwhite">GitHub</a>
+          <a href="https://github.com/Vellixia/Cairn" className="hover:text-offwhite">GitHub</a>
           <Link href="/dashboard" className="rounded-lg bg-ember px-3.5 py-1.5 font-semibold text-[#1a1206] hover:opacity-90">
             Open dashboard
           </Link>
@@ -51,7 +51,7 @@ export default function Home() {
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-lg text-[#cdd5e0]">
           Cairn remembers everything, feeds lean context, and keeps your agents reliable on long
-          tasks — self-hosted, one Rust binary, with <span className="text-offwhite">no context ever lost</span>.
+          tasks — self-hosted, with <span className="text-offwhite">no context ever lost</span>.
         </p>
         <div className="mx-auto mt-8 flex max-w-xl flex-col gap-3">
           <Cmd>curl -fsSL https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.sh | sh</Cmd>
@@ -59,11 +59,30 @@ export default function Home() {
             <Link href="/dashboard" className="rounded-lg bg-ember px-4 py-2 font-semibold text-[#1a1206] hover:opacity-90">
               Open the dashboard →
             </Link>
-            <a href="https://github.com/Vellixia/cairn" className="rounded-lg border border-line px-4 py-2 font-semibold hover:bg-surface">
+            <a href="https://github.com/Vellixia/Cairn" className="rounded-lg border border-line px-4 py-2 font-semibold hover:bg-surface">
               Star on GitHub
             </a>
           </div>
         </div>
+      </section>
+
+      {/* proof */}
+      <section className="mx-auto max-w-5xl px-5 py-6">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[
+            ["90%", "fewer tokens reading code as AST outlines"],
+            ["99.7%", "saved re-reading an unchanged file"],
+            ["100%", "lossless — every original one expand away"],
+          ].map(([n, l]) => (
+            <div key={l} className="rounded-xl border border-line bg-surface p-5 text-center">
+              <div className="text-3xl font-bold text-teal">{n}</div>
+              <div className="mt-1 text-sm text-slate">{l}</div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-center text-xs text-slate">
+          Measured by <span className="font-mono">cairn bench</span> on Cairn&apos;s own codebase.
+        </p>
       </section>
 
       {/* problem strip */}
@@ -107,8 +126,8 @@ export default function Home() {
         <div className="rounded-2xl border border-line bg-surface p-7">
           <h2 className="text-2xl font-semibold tracking-tight">Self-host in one command</h2>
           <p className="mt-2 max-w-2xl text-[#aab3c0]">
-            One tiny Rust binary — no Node or Python runtime. Run it on a home server, NAS,
-            Raspberry Pi, or a cheap VPS, then pair every device from the dashboard.
+            Run one Cairn server — no Node or Python runtime in the loop. Host it on a server, NAS,
+            or a cheap VPS, then connect every device and agent from the dashboard.
           </p>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             <div>
@@ -121,8 +140,8 @@ export default function Home() {
             </div>
           </div>
           <p className="mt-4 text-sm text-slate">
-            Then run <span className="font-mono">cairn install claude-code</span> to wire up the MCP
-            server and hooks. One-command install + QR pairing is on the roadmap.
+            Then run <span className="font-mono">cairn install --all</span> to auto-detect every
+            agent (Claude Code, Cursor, VS Code, Windsurf) and wire up MCP + lifecycle hooks.
           </p>
         </div>
       </section>

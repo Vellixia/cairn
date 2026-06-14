@@ -69,6 +69,19 @@ export interface ShareExport {
   withheld: number;
   memories: unknown[];
 }
+export interface PoolMemory {
+  kind: string;
+  content: string;
+  concepts: string[];
+  sensitivity: Sensitivity;
+  redactions: number;
+}
+export interface Pool {
+  schema: string;
+  version: number;
+  count: number;
+  memories: PoolMemory[];
+}
 export interface Memory {
   id: string;
   kind: string;

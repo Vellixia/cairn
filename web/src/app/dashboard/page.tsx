@@ -18,9 +18,10 @@ import {
   type Sensitivity,
   type ShareExport,
   type Reliability,
+  type Pool,
 } from "@/lib/api";
 
-const TABS = ["Overview", "Memory", "Context", "Reliability", "Preferences", "Share", "Devices"] as const;
+const TABS = ["Overview", "Memory", "Context", "Reliability", "Preferences", "Share", "Pool", "Devices"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function Dashboard() {
@@ -61,6 +62,7 @@ export default function Dashboard() {
         {tab === "Reliability" && <ReliabilityPanel />}
         {tab === "Preferences" && <PreferencesPanel />}
         {tab === "Share" && <SharePanel />}
+        {tab === "Pool" && <PoolPanel />}
         {tab === "Devices" && <DevicesPanel />}
       </div>
     </div>
@@ -581,6 +583,79 @@ function SharePanel() {
         <p className="mt-3 text-xs text-slate">
           On the receiving machine: <span className="font-mono">cairn import --share bundle.json</span>.
         </p>
+      </Card>
+    </div>
+  );
+}
+
+function PoolPanel() {
+  const [pool, setPool] = useState<Pool | null>(null);
+  const [note, setNote] = useState("");
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setPool(await getJSON<Pool>("/api/pool"));
+      setErr("");
+    } catch (e) {
+      setErr(String(e));
+    }
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function publish() {
+    try {
+      const bundle = await getJSON<ShareExport>("/api/share/export");
+      const res = await postJSON<{ accepted: number; rejected: number }>(
+        "/api/pool/contribute",
+        bundle,
+      );
+      setNote(`published: ${res.accepted} accepted, ${res.rejected} rejected (re-sanitized by the server)`);
+      load();
+    } catch (e) {
+      setErr(String(e));
+    }
+  }
+
+  return (
+    <div className="grid gap-4">
+      <Card title="Collective pool — sanitized knowledge this server shares">
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={publish} className={btnPrimary}>
+            Publish my shareable memories
+          </button>
+          {pool && <span className="text-sm text-slate">{pool.count} in pool</span>}
+        </div>
+        {note && <p className="mt-2 text-xs text-teal">{note}</p>}
+        {err && <p className="mt-2 text-xs text-ember">{err}</p>}
+        <div className="mt-3 space-y-2">
+          {pool && pool.memories.length === 0 && (
+            <p className="text-sm text-slate">
+              The pool is empty. Publish your shareable memories, or have peers{" "}
+              <span className="font-mono">cairn contribute</span> to this server.
+            </p>
+          )}
+          {pool?.memories.map((m, i) => (
+            <div key={i} className="rounded-lg border border-line bg-surface2 px-3 py-2 text-sm">
+              {m.content}
+              <div className="mt-1 flex items-center gap-2 text-xs text-slate">
+                <SensitivityBadge level={m.sensitivity} />
+                <span>{m.kind}</span>
+                {m.redactions > 0 && <span>· {m.redactions} redaction(s)</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card title="Federate across machines">
+        <p className="mb-3 text-sm text-slate">
+          Pool sanitized knowledge with other Cairn servers. The receiving server re-sanitizes every
+          contribution — a client&apos;s redaction is never trusted.
+        </p>
+        <pre className="rounded-lg border border-line bg-surface2 p-3 font-mono text-xs text-[#cdd5e0]">{`cairn contribute --server ${API_BASE}
+cairn pull --server ${API_BASE}`}</pre>
       </Card>
     </div>
   );
