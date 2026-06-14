@@ -349,6 +349,7 @@ dependencies = [
  "cairn-core",
  "regex",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

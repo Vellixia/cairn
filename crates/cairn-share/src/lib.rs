@@ -13,12 +13,12 @@
 //! The redaction is conservative on purpose: when in doubt it over-redacts, because the cost of a
 //! leaked credential dwarfs the cost of a `[redacted:…]` placeholder.
 
-use cairn_core::{Memory, MemoryKind};
+use cairn_core::{Memory, MemoryKind, NewMemory};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// How sensitive a piece of text is, and therefore how freely it may be shared.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Sensitivity {
     Shareable,
@@ -133,14 +133,58 @@ pub struct Sanitized {
 }
 
 /// A memory rewritten so it is safe to consider for sharing.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShareableMemory {
     pub kind: MemoryKind,
     pub content: String,
+    #[serde(default)]
     pub concepts: Vec<String>,
     pub sensitivity: Sensitivity,
     /// How many spans were redacted out of the content.
+    #[serde(default)]
     pub redactions: usize,
+}
+
+impl ShareableMemory {
+    /// Convert an ingested shareable memory into a new local memory, tagged with `shared`
+    /// provenance so it stays distinguishable from first-party memories.
+    pub fn into_new_memory(self) -> NewMemory {
+        let mut nm = NewMemory::new(self.content);
+        nm.kind = Some(self.kind);
+        nm.concepts = self.concepts;
+        nm.session_id = Some("shared".to_string());
+        nm
+    }
+}
+
+/// A portable bundle of sanitized memories — the unit of collective-knowledge exchange.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShareBundle {
+    pub schema: String,
+    pub version: u32,
+    pub memories: Vec<ShareableMemory>,
+}
+
+impl ShareBundle {
+    /// The schema tag stamped on every bundle.
+    pub const SCHEMA: &'static str = "cairn-share-bundle";
+
+    /// Convert the bundle's memories into new local memories ready to remember.
+    pub fn into_new_memories(self) -> Vec<NewMemory> {
+        self.memories
+            .into_iter()
+            .map(ShareableMemory::into_new_memory)
+            .collect()
+    }
+}
+
+/// Counts from building a [`ShareBundle`].
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct ShareStats {
+    pub total: usize,
+    pub shared: usize,
+    pub needs_review: usize,
+    pub withheld: usize,
 }
 
 struct Pattern {
@@ -296,6 +340,38 @@ impl Sanitizer {
             sensitivity,
             redactions: content.findings.len(),
         }
+    }
+
+    /// Build a shareable bundle from local memories: redact each, withhold any that still classify
+    /// as private, and report the counts. `NeedsReview` memories are included (the receiver decides).
+    pub fn bundle(&self, mems: &[Memory]) -> (ShareBundle, ShareStats) {
+        let mut memories = Vec::new();
+        let mut stats = ShareStats {
+            total: mems.len(),
+            shared: 0,
+            needs_review: 0,
+            withheld: 0,
+        };
+        for m in mems {
+            let sm = self.sanitize_memory(m);
+            match sm.sensitivity {
+                Sensitivity::Private => stats.withheld += 1,
+                Sensitivity::NeedsReview => {
+                    stats.needs_review += 1;
+                    memories.push(sm);
+                }
+                Sensitivity::Shareable => memories.push(sm),
+            }
+        }
+        stats.shared = memories.len();
+        (
+            ShareBundle {
+                schema: ShareBundle::SCHEMA.to_string(),
+                version: 1,
+                memories,
+            },
+            stats,
+        )
     }
 }
 
@@ -489,5 +565,27 @@ mod tests {
             san().sanitize_memory(&m2).sensitivity,
             Sensitivity::NeedsReview
         );
+    }
+
+    #[test]
+    fn bundle_withholds_private_round_trips_and_ingests_with_provenance() {
+        let clean = cairn_core::NewMemory::new("prefer BM25 ranking for recall").into_memory();
+        let secret = cairn_core::NewMemory::new("password = supersecretvalue123").into_memory();
+        let (bundle, stats) = san().bundle(&[clean, secret]);
+        assert_eq!(stats.total, 2);
+        assert_eq!(stats.withheld, 1); // the password memory is held back
+        assert_eq!(stats.shared, 1);
+        assert_eq!(bundle.schema, ShareBundle::SCHEMA);
+
+        // A bundle serializes and parses back (unknown producer fields are ignored).
+        let json = serde_json::to_string(&bundle).unwrap();
+        let parsed: ShareBundle = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.memories.len(), 1);
+
+        // Ingesting tags each memory with `shared` provenance.
+        let news = parsed.into_new_memories();
+        assert_eq!(news.len(), 1);
+        assert_eq!(news[0].session_id.as_deref(), Some("shared"));
+        assert!(news[0].content.contains("BM25"));
     }
 }

@@ -123,8 +123,13 @@ enum Cmd {
         #[arg(long)]
         share: bool,
     },
-    /// Import memories from a JSON file (last-write-wins).
-    Import { path: PathBuf },
+    /// Import memories from a JSON file (last-write-wins), or a share bundle with `--share`.
+    Import {
+        path: PathBuf,
+        /// Treat the file as a sanitized share bundle and ingest it as shared memories.
+        #[arg(long)]
+        share: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -327,17 +332,27 @@ async fn main() -> anyhow::Result<()> {
                 None => println!("{json}"),
             }
         }
-        Cmd::Import { path } => {
+        Cmd::Import { path, share } => {
             let state = AppState::new(&cfg)?;
             let text = std::fs::read_to_string(&path)?;
-            let mems: Vec<cairn_core::Memory> = serde_json::from_str(&text)?;
-            let mut applied = 0usize;
-            for m in &mems {
-                if state.store.upsert_memory(m)? {
-                    applied += 1;
+            if share {
+                let bundle: cairn_share::ShareBundle = serde_json::from_str(&text)?;
+                let news = bundle.into_new_memories();
+                let total = news.len();
+                for nm in news {
+                    state.mem.remember(nm)?;
                 }
+                println!("ingested {total} shared memories (deduplicated against existing)");
+            } else {
+                let mems: Vec<cairn_core::Memory> = serde_json::from_str(&text)?;
+                let mut applied = 0usize;
+                for m in &mems {
+                    if state.store.upsert_memory(m)? {
+                        applied += 1;
+                    }
+                }
+                println!("imported {applied} of {} memories", mems.len());
             }
-            println!("imported {applied} of {} memories", mems.len());
         }
     }
     Ok(())
@@ -346,32 +361,11 @@ async fn main() -> anyhow::Result<()> {
 /// Build a privacy-first share bundle: redact secrets/PII from every memory, withhold any that
 /// still classify as Private, and summarize what happened on stderr.
 fn build_share_bundle(mems: &[cairn_core::Memory]) -> anyhow::Result<String> {
-    use cairn_share::Sensitivity;
     let san = cairn_share::Sanitizer::new();
-    let mut shareable = Vec::new();
-    let mut withheld = 0usize;
-    let mut needs_review = 0usize;
-    for m in mems {
-        let sm = san.sanitize_memory(m);
-        match sm.sensitivity {
-            Sensitivity::Private => withheld += 1,
-            Sensitivity::NeedsReview => {
-                needs_review += 1;
-                shareable.push(sm);
-            }
-            Sensitivity::Shareable => shareable.push(sm),
-        }
-    }
-    let shared = shareable.len();
-    let bundle = serde_json::json!({
-        "schema": "cairn-share-bundle",
-        "version": 1,
-        "generated_at": chrono::Utc::now().to_rfc3339(),
-        "memories": shareable,
-    });
+    let (bundle, stats) = san.bundle(mems);
     eprintln!(
-        "[cairn share: {} scanned \u{2192} {shared} shareable ({needs_review} need review), {withheld} withheld as private]",
-        mems.len()
+        "[cairn share: {} scanned \u{2192} {} shareable ({} need review), {} withheld as private]",
+        stats.total, stats.shared, stats.needs_review, stats.withheld
     );
     Ok(serde_json::to_string_pretty(&bundle)?)
 }

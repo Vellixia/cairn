@@ -87,6 +87,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/profile", get(get_profile).post(post_prefer))
         .route("/api/share/sanitize", post(sanitize_text))
         .route("/api/share/export", get(share_export))
+        .route("/api/share/import", post(share_import))
         .route("/api/sync/pull", get(sync_pull))
         .route("/api/sync/push", post(sync_push))
         .fallback(static_handler)
@@ -350,24 +351,29 @@ async fn sanitize_text(
 /// private are withheld entirely.
 async fn share_export(State(s): State<AppState>) -> Result<Json<Value>, ApiError> {
     let mems = s.store.all_memories()?;
-    let mut memories = Vec::new();
-    let mut withheld = 0usize;
-    for m in &mems {
-        let sm = s.san.sanitize_memory(m);
-        if sm.sensitivity == cairn_share::Sensitivity::Private {
-            withheld += 1;
-        } else {
-            memories.push(sm);
-        }
-    }
+    let (bundle, stats) = s.san.bundle(&mems);
     Ok(Json(json!({
-        "schema": "cairn-share-bundle",
-        "version": 1,
-        "total": mems.len(),
-        "shared": memories.len(),
-        "withheld": withheld,
-        "memories": memories,
+        "schema": bundle.schema,
+        "version": bundle.version,
+        "total": stats.total,
+        "shared": stats.shared,
+        "needs_review": stats.needs_review,
+        "withheld": stats.withheld,
+        "memories": bundle.memories,
     })))
+}
+
+/// Ingest a sanitized share bundle as `shared`-tagged memories (deduplicated against existing).
+async fn share_import(
+    State(s): State<AppState>,
+    Json(bundle): Json<cairn_share::ShareBundle>,
+) -> Result<Json<Value>, ApiError> {
+    let news = bundle.into_new_memories();
+    let total = news.len();
+    for nm in news {
+        s.mem.remember(nm)?;
+    }
+    Ok(Json(json!({ "ingested": total })))
 }
 
 // ---- sync + auth -------------------------------------------------------------------------------
@@ -594,5 +600,30 @@ mod tests {
         assert_eq!(bundle["shared"], 1);
         let serialized = serde_json::to_string(&bundle).unwrap();
         assert!(!serialized.contains("abcdefghijklmnop12345678"));
+    }
+
+    #[tokio::test]
+    async fn share_export_then_import_round_trips_into_a_fresh_instance() {
+        let (src, _d1) = test_state();
+        src.mem
+            .remember(NewMemory::new("prefer ripgrep over grep"))
+            .unwrap();
+
+        // Export, then parse the bundle back (extra summary fields are ignored).
+        let exported = share_export(State(src.clone())).await.unwrap().0;
+        let bundle: cairn_share::ShareBundle = serde_json::from_value(exported).unwrap();
+
+        // Import into a brand-new instance.
+        let (dst, _d2) = test_state();
+        let res = share_import(State(dst.clone()), Json(bundle))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(res["ingested"], 1);
+
+        // The shared memory is now recallable there, tagged with `shared` provenance.
+        let hits = dst.mem.recall("ripgrep", 5).unwrap();
+        assert!(hits.iter().any(|h| h.memory.content.contains("ripgrep")));
+        assert_eq!(hits[0].memory.session_id.as_deref(), Some("shared"));
     }
 }

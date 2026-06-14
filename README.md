@@ -149,6 +149,7 @@ The `cairn` binary:
 | `cairn token create <name>` · `cairn sync --server <url> --token <t>` | device tokens · multi-device sync |
 | `cairn export <file>` · `cairn import <file>` | move memory between machines offline |
 | `cairn export --share <file>` | export a sanitized, shareable bundle (secrets/PII redacted, private memories withheld) |
+| `cairn import --share <file>` | ingest a shared bundle (tagged `shared`, deduplicated against existing) |
 | `cairn doctor` | verify the local setup |
 
 ## Multi-device & sync
