@@ -100,6 +100,38 @@ cargo install --git https://github.com/Vellixia/cairn cairn-cli
 
 Then run `cairn serve` and open <http://127.0.0.1:7777>.
 
+## Topology: one server, many devices
+
+Cairn is **server + clients**. Run one Cairn server where it's always reachable (a home server,
+NAS, VPS, or `docker compose up`); each personal device runs the same `cairn` binary locally (its
+own store, MCP, and hooks) and **pairs/syncs to the server's URL**.
+
+```sh
+# On the server — expose it on the network and note its URL, e.g. http://192.168.1.10:7777
+cairn serve --host 0.0.0.0           # or set CAIRN_HOST=0.0.0.0 in .env
+cairn pair-code                      # prints a short, single-use pairing code
+
+# On a personal device — point it at the server once
+cairn pair <code> --server http://192.168.1.10:7777
+# now `cairn sync --server http://192.168.1.10:7777` (or just `cairn sync` if CAIRN_SERVER is set)
+```
+
+The **dashboard works at the server's URL out of the box** — open `http://192.168.1.10:7777` and the
+UI talks to that same origin (no rebuild, no hardcoded localhost).
+
+## Configuration (`.env`)
+
+Settings resolve **CLI flag > environment / `.env` > default**. Copy `.env.example` to a project
+`.env` or a machine-global `~/.config/cairn/.env` ("global cairn", applies to every project):
+
+| Variable | What |
+|---|---|
+| `CAIRN_DATA_DIR` | data directory (default: OS data dir; `/data` in Docker) |
+| `CAIRN_HOST` · `CAIRN_PORT` | serve bind address (default `127.0.0.1:7777`) |
+| `CAIRN_SERVER` | default server URL for `sync` / `pull` / `contribute` |
+| `CAIRN_HELIX_URL` | HelixDB server URL (unset = embedded store) |
+| `CAIRN_EMBED_PROVIDER` · `_MODEL` · `_URL` · `_API_KEY` | embedding model (default: local `all-MiniLM-L6-v2`) |
+
 ## Quickstart (dev)
 
 ```sh

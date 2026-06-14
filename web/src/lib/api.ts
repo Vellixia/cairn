@@ -1,6 +1,16 @@
-// Tiny typed client for the Cairn HTTP API. The base URL is configurable so the dashboard can
-// talk to a remote self-hosted server; it defaults to the local dev server.
-export const API_BASE = process.env.NEXT_PUBLIC_CAIRN_API ?? "http://127.0.0.1:7777";
+// Tiny typed client for the Cairn HTTP API.
+//
+// The dashboard is a static export served BY the cairn server, so by default it talks to whatever
+// origin it was loaded from (`window.location.origin`). That means opening the dashboard at
+// http://your-server:7777 just works — no rebuild, no hardcoded localhost. Set NEXT_PUBLIC_CAIRN_API
+// only for split deploys (UI hosted separately from the API).
+function resolveBase(): string {
+  if (process.env.NEXT_PUBLIC_CAIRN_API) return process.env.NEXT_PUBLIC_CAIRN_API;
+  if (typeof window !== "undefined") return window.location.origin;
+  return "http://127.0.0.1:7777"; // build/SSR fallback (replaced at runtime in the browser)
+}
+
+export const API_BASE = resolveBase();
 
 export async function getJSON<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`);

@@ -38,10 +38,12 @@ struct Cli {
 enum Cmd {
     /// Start the Cairn server (HTTP API + web control plane).
     Serve {
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
-        #[arg(long, default_value_t = 7777)]
-        port: u16,
+        /// Bind host (default 127.0.0.1, or `CAIRN_HOST`).
+        #[arg(long)]
+        host: Option<String>,
+        /// Bind port (default 7777, or `CAIRN_PORT`).
+        #[arg(long)]
+        port: Option<u16>,
     },
     /// Store a memory.
     Remember { content: String },
@@ -175,6 +177,13 @@ enum TokenCmd {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Load .env before anything reads env: project ./.env first (never overrides real env), then
+    // the machine-global ~/.config/cairn/.env (never overrides project or real env).
+    let _ = dotenvy::dotenv();
+    if let Some(global) = cairn_core::config::global_env_path() {
+        let _ = dotenvy::from_path(&global);
+    }
+
     // Log to stderr so `cairn mcp` keeps stdout clean for the JSON-RPC protocol.
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
@@ -188,6 +197,8 @@ async fn main() -> anyhow::Result<()> {
     match cli.cmd {
         Cmd::Serve { host, port } => {
             let state = AppState::new(&cfg)?;
+            let host = host.unwrap_or_else(|| cfg.host.clone());
+            let port = port.unwrap_or(cfg.port);
             let addr: SocketAddr = format!("{host}:{port}")
                 .parse()
                 .with_context(|| format!("invalid address {host}:{port}"))?;

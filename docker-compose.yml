@@ -1,24 +1,36 @@
 # Cairn server — one command to self-host:  docker compose up
+# Configure by copying .env.example to .env (embeddings, HelixDB URL, etc.).
 services:
   cairn:
     build: .
     image: cairn:dev
     container_name: cairn
+    # CAIRN_* settings (optional). The Docker CMD already binds 0.0.0.0:7777 on /data.
+    env_file:
+      - path: .env
+        required: false
     ports:
       - "7777:7777"
     volumes:
       - cairn-data:/data
     restart: unless-stopped
+    # To point Cairn at the HelixDB service below instead of the embedded store, set in .env:
+    #   CAIRN_HELIX_URL=http://helix:6969
+    # then uncomment `depends_on` and the `helix` service.
+    # depends_on:
+    #   - helix
 
-  # Phase 2: swap the embedded SQLite store for Postgres + pgvector for multi-device.
-  # postgres:
-  #   image: pgvector/pgvector:pg16
-  #   environment:
-  #     POSTGRES_PASSWORD: cairn
-  #     POSTGRES_DB: cairn
+  # HelixDB graph + vector datastore — wired up in the HelixDB integration phase
+  # (image/run model finalized via a live spike before this is enabled).
+  # helix:
+  #   image: <helixdb-image>
+  #   container_name: cairn-helix
+  #   ports:
+  #     - "6969:6969"
   #   volumes:
-  #     - cairn-pg:/var/lib/postgresql/data
+  #     - helix-data:/data
+  #   restart: unless-stopped
 
 volumes:
   cairn-data:
-  # cairn-pg:
+  # helix-data:
