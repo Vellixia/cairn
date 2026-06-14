@@ -128,7 +128,8 @@ To do it by hand: run `claude mcp add cairn -- cairn mcp`, or add an `.mcp.json`
 ```
 
 Tools exposed: `read`, `expand`, `remember`, `recall`, `wakeup`, `consolidate`, `assemble`,
-`prefer`, `profile`, `anchor`, `checkpoint`, `rollback`, `checkpoints`, `verify`, `compress`.
+`prefer`, `profile`, `anchor`, `checkpoint`, `rollback`, `checkpoints`, `verify`, `compress`,
+`sanitize`.
 During dev, use `cargo run -p cairn-cli -- mcp` as the command.
 
 ## Commands

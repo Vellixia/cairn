@@ -6,7 +6,7 @@
 //! protocol is stable.
 //!
 //! Tools exposed: read/expand, remember/recall/wakeup/consolidate, assemble, prefer/profile,
-//! anchor, verify, compress.
+//! anchor, verify, compress, sanitize.
 
 use cairn_assemble::Assembler;
 use cairn_context::{ContextEngine, ReadMode};
@@ -29,6 +29,7 @@ pub struct McpServer {
     asm: Arc<Assembler>,
     shell: Arc<ShellCompressor>,
     profile: Arc<Profile>,
+    san: cairn_share::Sanitizer,
     mem: Arc<MemoryEngine>,
 }
 
@@ -42,6 +43,7 @@ impl McpServer {
             asm: Arc::new(Assembler::new(mem.clone())),
             shell: Arc::new(ShellCompressor::new(store.clone())),
             profile: Arc::new(Profile::new(mem.clone())),
+            san: cairn_share::Sanitizer::new(),
             mem,
         })
     }
@@ -261,6 +263,11 @@ impl McpServer {
                     .map_err(|e| e.to_string())?;
                 serde_json::to_string_pretty(&r).map_err(|e| e.to_string())
             }
+            "sanitize" => {
+                let text = str_arg(args.get("text")).ok_or("missing 'text'")?;
+                let s = self.san.sanitize(text);
+                serde_json::to_string_pretty(&s).map_err(|e| e.to_string())
+            }
             other => Err(format!("unknown tool: {other}")),
         }
     }
@@ -404,6 +411,17 @@ fn tool_defs() -> Value {
                 },
                 "required": ["path", "content"]
             }
+        },
+        {
+            "name": "sanitize",
+            "description": "Check text for secrets/PII before you share, log, or commit it. Redacts API keys, tokens, private keys, JWTs, secret=value assignments, emails, IPs, and home-directory paths, and classifies the result as shareable, needs_review, or private. Returns the redacted text plus the findings.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string", "description": "The text to scan and redact." }
+                },
+                "required": ["text"]
+            }
         }
     ])
 }
@@ -471,5 +489,26 @@ mod tests {
         assert!(s
             .handle(&json!({"jsonrpc":"2.0","method":"notifications/initialized"}))
             .is_none());
+    }
+
+    #[test]
+    fn sanitize_tool_redacts_and_classifies() {
+        let (s, _d) = server();
+        // Assembled at runtime so the repo stores no verbatim credential (push protection).
+        let token = format!("ghp_{}", "0123456789abcdefghijklmnopqrstuvwxyz");
+        let resp = s
+            .handle(
+                &json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+                "name":"sanitize","arguments":{"text": format!("deploy token={token}")}}}),
+            )
+            .unwrap();
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        let v: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(v["sensitivity"], "private");
+        assert!(v["text"]
+            .as_str()
+            .unwrap()
+            .contains("[redacted:github_token]"));
+        assert!(!text.contains(&token), "raw secret leaked in tool output");
     }
 }

@@ -41,6 +41,7 @@ pub struct AppState {
     pub asm: Arc<Assembler>,
     pub shell: Arc<ShellCompressor>,
     pub profile: Arc<Profile>,
+    pub san: Arc<cairn_share::Sanitizer>,
 }
 
 impl AppState {
@@ -52,6 +53,7 @@ impl AppState {
         let asm = Arc::new(Assembler::new(mem.clone()));
         let shell = Arc::new(ShellCompressor::new(store.clone()));
         let profile = Arc::new(Profile::new(mem.clone()));
+        let san = Arc::new(cairn_share::Sanitizer::new());
         Ok(Self {
             store,
             ctx,
@@ -60,6 +62,7 @@ impl AppState {
             asm,
             shell,
             profile,
+            san,
         })
     }
 }
@@ -82,6 +85,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/guard/rollback", post(rollback_checkpoint))
         .route("/api/shell/compress", post(shell_compress))
         .route("/api/profile", get(get_profile).post(post_prefer))
+        .route("/api/share/sanitize", post(sanitize_text))
+        .route("/api/share/export", get(share_export))
         .route("/api/sync/pull", get(sync_pull))
         .route("/api/sync/push", post(sync_push))
         .fallback(static_handler)
@@ -329,6 +334,42 @@ async fn post_prefer(
     Ok(Json(s.profile.prefer(&b.rule)?))
 }
 
+#[derive(Deserialize)]
+struct SanitizeBody {
+    text: String,
+}
+
+async fn sanitize_text(
+    State(s): State<AppState>,
+    Json(b): Json<SanitizeBody>,
+) -> Json<cairn_share::Sanitized> {
+    Json(s.san.sanitize(&b.text))
+}
+
+/// Export a sanitized, shareable bundle: secrets/PII redacted, and memories that still classify as
+/// private are withheld entirely.
+async fn share_export(State(s): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let mems = s.store.all_memories()?;
+    let mut memories = Vec::new();
+    let mut withheld = 0usize;
+    for m in &mems {
+        let sm = s.san.sanitize_memory(m);
+        if sm.sensitivity == cairn_share::Sensitivity::Private {
+            withheld += 1;
+        } else {
+            memories.push(sm);
+        }
+    }
+    Ok(Json(json!({
+        "schema": "cairn-share-bundle",
+        "version": 1,
+        "total": mems.len(),
+        "shared": memories.len(),
+        "withheld": withheld,
+        "memories": memories,
+    })))
+}
+
 // ---- sync + auth -------------------------------------------------------------------------------
 
 #[derive(Deserialize)]
@@ -525,5 +566,33 @@ mod tests {
         assert_eq!(set["anchor"], "ship the API");
         let got = get_anchor(State(state.clone())).await.unwrap().0;
         assert_eq!(got["anchor"], "ship the API");
+    }
+
+    #[tokio::test]
+    async fn share_endpoints_sanitize_text_and_withhold_private_memories() {
+        let (state, _dir) = test_state();
+        state
+            .mem
+            .remember(NewMemory::new("prefer ripgrep over grep"))
+            .unwrap();
+        // Assembled at runtime so the repo stores no verbatim credential (push protection).
+        let leak = format!("api_key = sk_{}_{}", "live", "abcdefghijklmnop12345678");
+        state.mem.remember(NewMemory::new(leak.clone())).unwrap();
+
+        // The sanitize endpoint redacts and classifies.
+        let s = sanitize_text(State(state.clone()), Json(SanitizeBody { text: leak }))
+            .await
+            .0;
+        assert_eq!(s.sensitivity, cairn_share::Sensitivity::Private);
+        assert!(!s.text.contains("sk_live"));
+
+        // The export endpoint withholds the private memory and keeps the clean one.
+        let bundle = share_export(State(state.clone())).await.unwrap().0;
+        assert_eq!(bundle["schema"], "cairn-share-bundle");
+        assert_eq!(bundle["total"], 2);
+        assert_eq!(bundle["withheld"], 1);
+        assert_eq!(bundle["shared"], 1);
+        let serialized = serde_json::to_string(&bundle).unwrap();
+        assert!(!serialized.contains("abcdefghijklmnop12345678"));
     }
 }
