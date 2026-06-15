@@ -521,6 +521,7 @@ name = "cairn-guard"
 version = "0.2.0"
 dependencies = [
  "cairn-core",
+ "cairn-profile",
  "cairn-store",
  "chrono",
  "serde",

@@ -53,7 +53,10 @@ pub struct AppState {
 impl AppState {
     pub fn new(cfg: &Config) -> cairn_core::Result<Self> {
         let store = Arc::new(Store::open(cfg)?);
-        let ctx = Arc::new(ContextEngine::new(store.clone()));
+        let ctx = Arc::new(ContextEngine::new_with_root(
+            store.clone(),
+            cfg.workspace_root.clone(),
+        ));
         let mem = Arc::new(MemoryEngine::new(store.clone()));
         let guard = Arc::new(Guard::new(store.clone()));
         let asm = Arc::new(Assembler::new(mem.clone()));
@@ -292,8 +295,13 @@ async fn expand(
 
 async fn remember(
     State(s): State<AppState>,
-    Json(input): Json<NewMemory>,
+    Json(mut input): Json<NewMemory>,
 ) -> Result<Json<Memory>, ApiError> {
+    // Strip injected preference delimiter blocks so memory content cannot smuggle itself back
+    // into the preference pipeline as a model directive.
+    input.content = cairn_profile::strip_preference_blocks(&input.content);
+    input.suspicious =
+        Some(input.suspicious.unwrap_or(false) || cairn_profile::is_suspicious(&input.content));
     Ok(Json(s.mem.remember(input)?))
 }
 
@@ -356,8 +364,10 @@ async fn post_anchor(
     State(s): State<AppState>,
     Json(b): Json<AnchorBody>,
 ) -> Result<Json<Value>, ApiError> {
-    s.guard.set_anchor(&b.goal)?;
-    Ok(Json(json!({ "anchor": b.goal })))
+    let meta = s.guard.set_anchor(&b.goal)?;
+    Ok(Json(
+        json!({ "anchor": meta.goal, "suspicious": meta.suspicious }),
+    ))
 }
 
 #[derive(Deserialize)]

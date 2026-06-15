@@ -216,6 +216,7 @@ impl Store {
             default_server: None,
             secret_key: Some(b"test-secret-key-must-be-32-bytes!!".to_vec()),
             tls: None,
+            workspace_root: None,
             embed: cairn_core::EmbedConfig {
                 provider: "hashing".into(),
                 model: None,
@@ -251,6 +252,7 @@ mod tests {
             session_id: None,
             importance: 0.5,
             access_count: 0,
+            suspicious: false,
             created_at: updated,
             updated_at: updated,
         }

@@ -53,6 +53,8 @@ pub struct Config {
     /// Network-exposed serve (`host` other than `127.0.0.1` / `localhost` / `::1`) requires this
     /// to be set; the API layer will refuse to start over plain HTTP on a non-loopback bind.
     pub tls: Option<TlsConfig>,
+    /// Optional project/workspace root used by context engines (`CAIRN_WORKSPACE_ROOT`).
+    pub workspace_root: Option<PathBuf>,
     /// Embedding settings.
     pub embed: EmbedConfig,
 }
@@ -86,6 +88,7 @@ impl Config {
                     ));
                 }
             },
+            workspace_root: env_path("CAIRN_WORKSPACE_ROOT"),
             embed: EmbedConfig {
                 provider: env_str("CAIRN_EMBED_PROVIDER").unwrap_or_else(|| "local".to_string()),
                 model: env_str("CAIRN_EMBED_MODEL"),
@@ -163,6 +166,7 @@ mod tests {
             default_server: None,
             secret_key: None,
             tls: None,
+            workspace_root: None,
             embed: EmbedConfig {
                 provider: "local".into(),
                 model: None,

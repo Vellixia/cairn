@@ -254,7 +254,11 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Prefer { rule } => {
             let state = AppState::new(&cfg)?;
             let m = state.profile.prefer(&rule.join(" "))?;
-            println!("noted preference: {}", m.content);
+            if m.suspicious {
+                println!("noted preference (flagged suspicious): {}", m.content);
+            } else {
+                println!("noted preference: {}", m.content);
+            }
         }
         Cmd::Anchor { goal } => {
             let state = AppState::new(&cfg)?;
