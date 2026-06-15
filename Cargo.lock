@@ -378,7 +378,7 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "cairn-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "cairn-assemble",
@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-assemble"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-core",
  "cairn-memory",
@@ -414,7 +414,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "cairn-api",
@@ -437,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-context"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-core",
  "cairn-store",
@@ -460,7 +460,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "directories",
@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-embed"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-core",
  "fastembed",
@@ -484,7 +484,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-guard"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-core",
  "cairn-store",
@@ -498,7 +498,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-assemble",
  "cairn-context",
@@ -515,7 +515,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-memory"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-core",
  "cairn-store",
@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-profile"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-core",
  "cairn-memory",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-share"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-core",
  "regex",
@@ -546,7 +546,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-shell"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-core",
  "cairn-store",
@@ -556,7 +556,7 @@ dependencies = [
 
 [[package]]
 name = "cairn-store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cairn-core",
  "cairn-embed",
