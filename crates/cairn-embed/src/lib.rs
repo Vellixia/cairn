@@ -28,8 +28,9 @@ pub fn from_config(cfg: &EmbedConfig) -> Result<Box<dyn Embedder>> {
         "openai" => Ok(Box::new(OpenAiEmbedder::new(cfg)?)),
         "ollama" => Ok(Box::new(OllamaEmbedder::new(cfg))),
         "local" => local_embedder(cfg),
+        "hashing" => Ok(Box::new(HashingEmbedder::new(cfg))),
         other => Err(Error::Invalid(format!(
-            "unknown CAIRN_EMBED_PROVIDER '{other}' (use local | openai | ollama)"
+            "unknown CAIRN_EMBED_PROVIDER '{other}' (use local | openai | ollama | hashing)"
         ))),
     }
 }
@@ -57,6 +58,68 @@ pub fn cosine(a: &[f32], b: &[f32]) -> f32 {
     } else {
         dot / (na * nb)
     }
+}
+
+// --- Hashing (deterministic, dependency-free) --------------------------------------------------
+
+/// A deterministic embedder using the **hashing trick** (signed feature hashing of tokens,
+/// L2-normalized). No model, no network, fully reproducible — texts that share tokens get higher
+/// cosine similarity, so it preserves lexical relatedness. Ideal for tests and as a
+/// zero-dependency fallback when the local model isn't compiled in (`CAIRN_EMBED_PROVIDER=hashing`;
+/// `CAIRN_EMBED_MODEL` may set the dimension, default 384 to match all-MiniLM-L6-v2).
+struct HashingEmbedder {
+    dim: usize,
+}
+
+impl HashingEmbedder {
+    fn new(cfg: &EmbedConfig) -> Self {
+        let dim = cfg
+            .model
+            .as_deref()
+            .and_then(|m| m.parse::<usize>().ok())
+            .unwrap_or(384);
+        Self { dim: dim.max(1) }
+    }
+}
+
+impl Embedder for HashingEmbedder {
+    fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        Ok(texts.iter().map(|t| hash_embed(t, self.dim)).collect())
+    }
+    fn dim(&self) -> usize {
+        self.dim
+    }
+}
+
+/// Signed feature-hashing of `text`'s tokens into a `dim`-length, L2-normalized vector.
+fn hash_embed(text: &str, dim: usize) -> Vec<f32> {
+    let mut v = vec![0f32; dim.max(1)];
+    for token in text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+    {
+        let h = fnv1a(&token.to_ascii_lowercase());
+        let idx = (h % v.len() as u64) as usize;
+        let sign = if (h >> 8) & 1 == 0 { 1.0 } else { -1.0 };
+        v[idx] += sign;
+    }
+    let norm = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm > 0.0 {
+        for x in &mut v {
+            *x /= norm;
+        }
+    }
+    v
+}
+
+/// 64-bit FNV-1a hash.
+fn fnv1a(s: &str) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in s.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
 }
 
 // --- OpenAI ------------------------------------------------------------------------------------
@@ -260,6 +323,24 @@ mod tests {
         assert!((cosine(&a, &a) - 1.0).abs() < 1e-6);
         assert!(cosine(&[1.0, 0.0], &[0.0, 1.0]).abs() < 1e-6);
         assert_eq!(cosine(&[0.0, 0.0], &[1.0, 1.0]), 0.0);
+    }
+
+    #[test]
+    fn hashing_embedder_is_deterministic_and_preserves_lexical_similarity() {
+        let e = from_config(&cfg("hashing")).unwrap();
+        assert_eq!(e.dim(), 384);
+        let v = e
+            .embed(&[
+                "use sqlite for the blob store".to_string(),
+                "use sqlite blob storage".to_string(),
+                "the weather today is sunny".to_string(),
+            ])
+            .unwrap();
+        assert_eq!(v[0].len(), 384);
+        // Deterministic.
+        assert_eq!(e.embed_one("use sqlite for the blob store").unwrap(), v[0]);
+        // Shared tokens -> higher cosine than an unrelated sentence.
+        assert!(cosine(&v[0], &v[1]) > cosine(&v[0], &v[2]));
     }
 
     #[test]
