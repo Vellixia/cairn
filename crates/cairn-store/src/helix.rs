@@ -20,18 +20,19 @@
 //! `add_n`; reads project the needed properties with `.values([...])`.
 //!
 //! ## Status
-//! Memory CRUD and the read paths are validated end-to-end against a live server. A few operations
-//! that require in-place update/delete DSL (`touch_memory`, `revoke_token`, `claim_pairing`) are
-//! intentionally minimal or return an explicit WIP error rather than fake a result — they are
-//! filled in as the update/delete patterns are validated. Bulk reads currently scan a label and
-//! filter in-process; property indexes and native predicates are a follow-up optimization.
+//! The full surface is implemented and validated end-to-end against a live server, including the
+//! in-place update/delete paths: `touch_memory`/`upsert_memory` use `set_property`, and
+//! `revoke_token`/`claim_pairing` use a label-scoped `drop` (`n_with_label_where(..).drop()`).
+//! Single-record lookups filter server-side via `n_with_label_where`; only the full-corpus reads
+//! (`all_memories`, `list_*`) scan a label, which is the natural follow-up to optimize with
+//! property indexes.
 
 use crate::db::StoreBackend;
 use cairn_core::{Config, ContentHash, DeviceToken, Error, Memory, MemoryKind, MemoryTier, Result};
 use cairn_embed::Embedder;
 use chrono::{DateTime, Utc};
 use helix_db::dsl::prelude::*;
-use helix_db::dsl::{DynamicQueryRequest, PropertyInput};
+use helix_db::dsl::{DynamicQueryRequest, PropertyInput, SourcePredicate};
 use helix_db::Client;
 use serde_json::{Map, Value};
 use std::future::Future;
@@ -141,16 +142,40 @@ impl HelixBackend {
             .var_as("rows", g().n_with_label(label).values(projection))
             .returning(["rows"]);
         let resp = self.run(DynamicQueryRequest::read(batch))?;
-        let arr = resp
-            .get("rows")
-            .and_then(|r| r.get("properties"))
-            .and_then(|p| p.as_array())
-            .cloned()
-            .unwrap_or_default();
-        Ok(arr
-            .into_iter()
-            .filter_map(|v| v.as_object().cloned())
-            .collect())
+        Ok(rows_of(&resp, "rows"))
+    }
+
+    /// Read nodes of `label` where `prop == val`, projecting `cols` (server-side filter).
+    fn read_where(
+        &self,
+        label: &str,
+        prop: &str,
+        val: &str,
+        cols: &[&str],
+    ) -> Result<Vec<Map<String, Value>>> {
+        let projection: Vec<String> = cols.iter().map(|c| c.to_string()).collect();
+        let batch = read_batch()
+            .var_as(
+                "rows",
+                g().n_with_label_where(label, SourcePredicate::eq(prop, val.to_string()))
+                    .values(projection),
+            )
+            .returning(["rows"]);
+        let resp = self.run(DynamicQueryRequest::read(batch))?;
+        Ok(rows_of(&resp, "rows"))
+    }
+
+    /// Delete every node of `label` where `prop == val`.
+    fn drop_where(&self, label: &str, prop: &str, val: &str) -> Result<()> {
+        let batch = write_batch()
+            .var_as(
+                "d",
+                g().n_with_label_where(label, SourcePredicate::eq(prop, val.to_string()))
+                    .drop(),
+            )
+            .returning(["d"]);
+        self.run(DynamicQueryRequest::write(batch))?;
+        Ok(())
     }
 
     /// All memories, newest first.
@@ -194,23 +219,42 @@ impl StoreBackend for HelixBackend {
     }
 
     fn get_memory(&self, id: &str) -> Result<Option<Memory>> {
-        Ok(self.load_memories()?.into_iter().find(|m| m.id == id))
+        Ok(self
+            .read_where(MEMORY, "id", id, MEM_COLS)?
+            .first()
+            .map(memory_from_props))
     }
 
     fn find_memory_by_content_hash(&self, hash: &str) -> Result<Option<Memory>> {
+        // `content_hash` is stored as a node property at insert time (see `insert_memory`).
         Ok(self
-            .load_memories()?
-            .into_iter()
-            .find(|m| ContentHash::of_str(&m.content).as_str() == hash))
+            .read_where(MEMORY, "content_hash", hash, MEM_COLS)?
+            .first()
+            .map(memory_from_props))
     }
 
     fn all_memories(&self) -> Result<Vec<Memory>> {
         self.load_memories()
     }
 
-    fn touch_memory(&self, _id: &str) -> Result<()> {
-        // Access-count bump needs in-place node update (WIP); a no-op is safe and lossless here —
-        // it only defers access analytics, never corrupts or drops a memory.
+    fn touch_memory(&self, id: &str) -> Result<()> {
+        let Some(row) = self
+            .read_where(MEMORY, "id", id, &["access_count"])?
+            .into_iter()
+            .next()
+        else {
+            return Ok(()); // nothing to touch
+        };
+        let next = get_i64(&row, "access_count") + 1;
+        let batch = write_batch()
+            .var_as(
+                "u",
+                g().n_with_label_where(MEMORY, SourcePredicate::eq("id", id.to_string()))
+                    .set_property("access_count", next)
+                    .set_property("updated_at", ts(Utc::now())),
+            )
+            .returning(["u"]);
+        self.run(DynamicQueryRequest::write(batch))?;
         Ok(())
     }
 
@@ -219,9 +263,11 @@ impl StoreBackend for HelixBackend {
     }
 
     fn upsert_memory(&self, m: &Memory) -> Result<bool> {
-        if self.get_memory(&m.id)?.is_some() {
-            // Last-writer-wins update needs update DSL (WIP); the existing copy is retained.
-            return Ok(false);
+        if let Some(existing) = self.get_memory(&m.id)? {
+            if m.updated_at < existing.updated_at {
+                return Ok(false); // incoming is older — last-writer-wins keeps the existing copy
+            }
+            self.drop_where(MEMORY, "id", &m.id)?; // replace in place
         }
         self.insert_memory(m)?;
         Ok(true)
@@ -247,15 +293,8 @@ impl StoreBackend for HelixBackend {
             )
             .returning(["ranked"]);
         let resp = self.run(DynamicQueryRequest::read(batch))?;
-        let rows = resp
-            .get("ranked")
-            .and_then(|r| r.get("properties"))
-            .and_then(|p| p.as_array())
-            .cloned()
-            .unwrap_or_default();
-        let mems = rows
+        let mems = rows_of(&resp, "ranked")
             .iter()
-            .filter_map(|v| v.as_object())
             .map(memory_from_props)
             .collect();
         Ok(Some(mems))
@@ -279,14 +318,19 @@ impl StoreBackend for HelixBackend {
     }
 
     fn validate_token(&self, token: &str) -> Result<bool> {
-        Ok(self
-            .read_rows("Token", &["token"])?
-            .iter()
-            .any(|r| get_str(r, "token") == token))
+        Ok(!self
+            .read_where("Token", "token", token, &["token"])?
+            .is_empty())
     }
 
-    fn revoke_token(&self, _token: &str) -> Result<bool> {
-        Err(wip("revoke_token (node delete)"))
+    fn revoke_token(&self, token: &str) -> Result<bool> {
+        let existed = !self
+            .read_where("Token", "token", token, &["token"])?
+            .is_empty();
+        if existed {
+            self.drop_where("Token", "token", token)?;
+        }
+        Ok(existed)
     }
 
     fn list_tokens(&self) -> Result<Vec<DeviceToken>> {
@@ -466,17 +510,33 @@ impl StoreBackend for HelixBackend {
         )
     }
 
-    fn claim_pairing(&self, _code: &str, _now: &str) -> Result<Option<(String, String)>> {
-        // Single-use claim requires an atomic read-then-delete (node delete DSL, WIP). Returning an
-        // explicit error is safer than handing back a code we cannot consume.
-        Err(wip("claim_pairing (atomic node delete)"))
+    fn claim_pairing(&self, code: &str, now: &str) -> Result<Option<(String, String)>> {
+        // Single-use: read the code, honor expiry, then delete it. (The window between read and
+        // delete is small; pairing is low-concurrency and codes are short-lived.)
+        let row = self
+            .read_where("Pairing", "code", code, &["token", "name", "expires_at"])?
+            .into_iter()
+            .next();
+        let Some(r) = row else { return Ok(None) };
+        if get_str(&r, "expires_at").as_str() <= now {
+            return Ok(None); // expired
+        }
+        let claimed = (get_str(&r, "token"), get_str(&r, "name"));
+        self.drop_where("Pairing", "code", code)?;
+        Ok(Some(claimed))
     }
 }
 
 // --- helpers -----------------------------------------------------------------------------------
 
-fn wip(op: &str) -> Error {
-    Error::Storage(format!("helix backend: {op} not yet implemented"))
+/// Pull the projected property rows out of a query response under variable `var`
+/// (`{ "<var>": { "properties": [ {..}, .. ] } }`).
+fn rows_of(resp: &Value, var: &str) -> Vec<Map<String, Value>> {
+    resp.get(var)
+        .and_then(|r| r.get("properties"))
+        .and_then(|p| p.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_object().cloned()).collect())
+        .unwrap_or_default()
 }
 
 /// RFC3339 with millisecond precision (matches the SQLite backend's timestamp format).
@@ -602,5 +662,50 @@ mod live {
             .iter()
             .any(|t| t.token == tok.token && t.name == "test-device"));
         assert!(be.count_tokens().expect("count after") > before);
+
+        // Revocation: a label-scoped delete removes exactly this token.
+        assert!(
+            be.revoke_token(&tok.token).expect("revoke"),
+            "first revoke reports removed"
+        );
+        assert!(!be
+            .validate_token(&tok.token)
+            .expect("validate after revoke"));
+        assert!(
+            !be.revoke_token(&tok.token).expect("revoke again"),
+            "second revoke is a no-op"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires a live HelixDB server (set CAIRN_HELIX_URL)"]
+    fn pairing_is_single_use() {
+        let Some(be) = backend() else { return };
+        let code = format!("pc-{}", uuid_simple());
+        let future = ts(Utc::now() + chrono::Duration::minutes(10));
+        be.create_pairing(&code, "tok-xyz", "new-device", &future)
+            .expect("create_pairing");
+        let now = ts(Utc::now());
+        // First claim succeeds and returns the token+name.
+        assert_eq!(
+            be.claim_pairing(&code, &now).expect("claim"),
+            Some(("tok-xyz".to_string(), "new-device".to_string()))
+        );
+        // Single-use: the code is consumed.
+        assert_eq!(be.claim_pairing(&code, &now).expect("claim again"), None);
+    }
+
+    #[test]
+    #[ignore = "requires a live HelixDB server (set CAIRN_HELIX_URL)"]
+    fn expired_pairing_is_rejected() {
+        let Some(be) = backend() else { return };
+        let code = format!("pc-{}", uuid_simple());
+        let past = ts(Utc::now() - chrono::Duration::minutes(1));
+        be.create_pairing(&code, "tok-old", "old-device", &past)
+            .expect("create_pairing");
+        let now = ts(Utc::now());
+        assert_eq!(be.claim_pairing(&code, &now).expect("claim expired"), None);
+        // Clean up the expired code we left behind.
+        let _ = be.drop_where("Pairing", "code", &code);
     }
 }
