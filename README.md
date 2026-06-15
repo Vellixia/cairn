@@ -62,15 +62,17 @@ All of it is lossless — the full original is retained and one `expand` away.
 
 🚧 Active development — the engine is functional today (memory, no-loss compression, context
 assembly, edit guardrails + reliability score, shell compression, preference learning,
-privacy-first sanitization, a federated collective-knowledge pool, and multi-device sync). Vectors
-+ graph (HelixDB) are next; see [the design plan](docs/PLAN.md).
+privacy-first sanitization, a federated collective-knowledge pool, and multi-device sync). A
+**HelixDB backend** (graph + vectors) is now available opt-in via `CAIRN_HELIX_URL` — the bundled
+`docker compose` stack runs it for you — with native HNSW semantic recall being wired in; the
+zero-config SQLite store stays the default. See [the design plan](docs/PLAN.md).
 
 This repo is a Cargo workspace:
 
 | Crate | Role |
 |---|---|
 | `cairn-core` | shared domain types, hashing, config |
-| `cairn-store` | pluggable backend (SQLite today) + content-hash blob store |
+| `cairn-store` | pluggable backend (SQLite default · HelixDB graph+vector opt-in) + content-hash blob store |
 | `cairn-context` | cached reads · AST signature outlines (11 languages) · byte-identical `expand` |
 | `cairn-memory` | remember · BM25 recall · wakeup · Ebbinghaus decay · 4-tier consolidation |
 | `cairn-assemble` | token-budgeted, edge-ordered context assembler (anti-rot) |
@@ -119,6 +121,35 @@ cairn pair <code> --server http://192.168.1.10:7777
 The **dashboard works at the server's URL out of the box** — open `http://192.168.1.10:7777` and the
 UI talks to that same origin (no rebuild, no hardcoded localhost).
 
+## Self-host with Docker
+
+The recommended production setup is the bundled stack — one command brings up Cairn backed by a
+persistent **HelixDB**:
+
+```sh
+cp .env.example .env        # optional — the defaults work as-is
+docker compose up -d        # builds Cairn, pulls HelixDB + MinIO, wires them together
+```
+
+Four services come up:
+
+| Service | Role | Address |
+|---|---|---|
+| `cairn` | server + dashboard | <http://localhost:7777> |
+| `helix` | HelixDB graph + vector datastore (Cairn's backend) | <http://localhost:6969> |
+| `minio` | S3 storage HelixDB persists to (survives restarts) | <http://localhost:9001> (console) |
+| `minio-init` | one-shot: creates HelixDB's bucket, then exits | — |
+
+Cairn reaches Helix over the compose network (`CAIRN_HELIX_URL=http://helix:8080`, set for you).
+The Cairn image is built with in-process **local embeddings** (`all-MiniLM-L6-v2`), so semantic
+memory works with no API key; for a leaner image build with `--build-arg CAIRN_FEATURES=""` and set
+a hosted `CAIRN_EMBED_PROVIDER`. Tune host ports and storage credentials in `.env` (`HELIX_PORT`,
+`CAIRN_PORT`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`).
+
+Prefer zero dependencies? Skip Helix entirely — plain `cairn serve` (or
+`docker run -p 7777:7777 -v cairn:/data ghcr.io/vellixia/cairn`) uses the built-in store and needs
+no external service.
+
 ## Configuration (`.env`)
 
 Settings resolve **CLI flag > environment / `.env` > default**. Copy `.env.example` to a project
@@ -129,7 +160,7 @@ Settings resolve **CLI flag > environment / `.env` > default**. Copy `.env.examp
 | `CAIRN_DATA_DIR` | data directory (default: OS data dir; `/data` in Docker) |
 | `CAIRN_HOST` · `CAIRN_PORT` | serve bind address (default `127.0.0.1:7777`) |
 | `CAIRN_SERVER` | default server URL for `sync` / `pull` / `contribute` |
-| `CAIRN_HELIX_URL` | HelixDB server URL (unset = embedded store) |
+| `CAIRN_HELIX_URL` | HelixDB server URL (unset = built-in SQLite store; the Docker stack sets this for you) |
 | `CAIRN_EMBED_PROVIDER` · `_MODEL` · `_URL` · `_API_KEY` | embedding model (default: local `all-MiniLM-L6-v2`) |
 
 ## Quickstart (dev)
