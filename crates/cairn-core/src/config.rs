@@ -69,17 +69,8 @@ impl Config {
         Ok(cfg)
     }
 
-    pub fn db_path(&self) -> PathBuf {
-        self.data_dir.join("cairn.db")
-    }
-
     pub fn blobs_dir(&self) -> PathBuf {
         self.data_dir.join("blobs")
-    }
-
-    /// Local directory for the embedded HelixDB store.
-    pub fn helix_dir(&self) -> PathBuf {
-        self.data_dir.join("helix")
     }
 
     pub fn data_dir(&self) -> &Path {

@@ -5,7 +5,7 @@
 # Honors: $env:CAIRN_REPO, $env:CAIRN_INSTALL_DIR
 $ErrorActionPreference = 'Stop'
 
-$Repo       = if ($env:CAIRN_REPO) { $env:CAIRN_REPO } else { 'Vellixia/cairn' }
+$Repo       = if ($env:CAIRN_REPO) { $env:CAIRN_REPO } else { 'Vellixia/Cairn' }
 $InstallDir = if ($env:CAIRN_INSTALL_DIR) { $env:CAIRN_INSTALL_DIR } else { "$env:LOCALAPPDATA\Cairn\bin" }
 $target     = 'x86_64-pc-windows-msvc'
 

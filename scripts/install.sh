@@ -7,7 +7,7 @@
 # Honors: CAIRN_REPO, CAIRN_INSTALL_DIR.
 set -eu
 
-REPO="${CAIRN_REPO:-Vellixia/cairn}"
+REPO="${CAIRN_REPO:-Vellixia/Cairn}"
 BIN="cairn"
 INSTALL_DIR="${CAIRN_INSTALL_DIR:-$HOME/.local/bin}"
 

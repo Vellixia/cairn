@@ -289,11 +289,28 @@ async fn main() -> anyhow::Result<()> {
             println!("memories: {}", state.store.count_memories()?);
         }
         Cmd::Doctor => {
-            let _ = AppState::new(&cfg)?;
-            println!("cairn doctor: ok");
-            println!("  data dir : {}", cfg.data_dir().display());
-            println!("  database : {}", cfg.db_path().display());
-            println!("  blobs    : {}", cfg.blobs_dir().display());
+            println!("cairn doctor");
+            println!("  data dir     : {}", cfg.data_dir().display());
+            println!("  blobs        : {}", cfg.blobs_dir().display());
+            println!(
+                "  helix url    : {}",
+                cfg.helix_url
+                    .as_deref()
+                    .unwrap_or("(not set — CAIRN_HELIX_URL required)")
+            );
+            println!("  embed        : {}", cfg.embed.provider);
+            match AppState::new(&cfg) {
+                Ok(state) => {
+                    let n = state.store.count_memories()?;
+                    println!("  helix        : ok");
+                    println!("  memories     : {n}");
+                    println!("cairn doctor: ok");
+                }
+                Err(e) => {
+                    println!("  helix        : FAILED — {e}");
+                    anyhow::bail!("cairn doctor: setup incomplete");
+                }
+            }
         }
         Cmd::Bench { path } => {
             let state = AppState::new(&cfg)?;

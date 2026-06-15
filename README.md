@@ -88,16 +88,16 @@ This repo is a Cargo workspace:
 
 ```sh
 # Linux / macOS — one-liner (downloads the latest release binary)
-curl -fsSL https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.sh | sh
 
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.ps1 | iex
 
 # Docker — the full stack (Cairn + HelixDB), the easiest path
 docker compose up -d
 
 # From source
-cargo install --git https://github.com/Vellixia/cairn cairn-cli
+cargo install --git https://github.com/Vellixia/Cairn cairn-cli
 ```
 
 Cairn stores its data in **HelixDB**, so `cairn serve` needs `CAIRN_HELIX_URL` set (or use the
