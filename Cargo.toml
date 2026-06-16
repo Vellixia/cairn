@@ -39,28 +39,32 @@ cairn-embed = { path = "crates/cairn-embed" }
 cairn-api = { path = "crates/cairn-api" }
 cairn-mcp = { path = "crates/cairn-mcp" }
 
-# shared third-party deps
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "2"
-anyhow = "1"
+# shared third-party deps — pinned to a specific minor so CI can fail loudly
+# via `cargo build --locked` if Cargo.lock drifts outside that minor.
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 sha2 = "0.10"
 hex = "0.4"
-uuid = { version = "1", features = ["v4", "serde"] }
-directories = "5"
-similar = "2"
-tokio = { version = "1", features = ["full"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+directories = "5.0"
+similar = "2.0"
+tokio = { version = "1.0", features = ["full"] }
 axum = "0.7"
 tower = "0.5"
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4.0", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tempfile = "3"
-rust-embed = "8"
-ureq = { version = "2", features = ["json"] }
+tempfile = "3.0"
+rust-embed = "8.0"
+ureq = { version = "2.0", features = ["json"] }
 dotenvy = "0.15"
+regex = "1.0"
+helix-db = "2.0"
+self_update = { version = "0.44", default-features = false, features = ["ureq", "rustls", "archive-tar", "compression-flate2", "archive-zip", "compression-zip-deflate"] }
 
 [profile.release]
 opt-level = 3

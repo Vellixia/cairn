@@ -32,7 +32,7 @@ chrono.workspace = true
 ureq.workspace = true
 tracing-subscriber.workspace = true
 dotenvy.workspace = true
-self_update = { version = "0.44.0", default-features = false, features = ["ureq", "rustls", "archive-tar", "compression-flate2", "archive-zip", "compression-zip-deflate"] }
+self_update.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

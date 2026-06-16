@@ -52,6 +52,7 @@ jobs:
       # built-in page, so the Rust build does not require a web build.
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo build --workspace --locked
       - name: cargo test
         run: cargo test --workspace
         env:
