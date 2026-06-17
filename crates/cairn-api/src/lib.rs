@@ -155,8 +155,7 @@ pub async fn serve(addr: SocketAddr, mut state: AppState) -> std::io::Result<()>
     // plain HTTP for local dev, otherwise we refuse — it's never safe to expose this API over
     // HTTP on a network.
     if !is_loopback_addr(addr) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(std::io::Error::other(
             format!(
                 "refusing to serve HTTP on non-loopback address {addr}: \
                  Cairn's API is authenticated and must not travel in cleartext over a network. \

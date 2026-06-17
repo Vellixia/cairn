@@ -97,7 +97,7 @@ mod tests {
     fn tampered_token_fails() {
         let signer = TokenSigner::new(b"test-secret-at-least-32-bytes-long!!".to_vec()).unwrap();
         let mut jwt = signer.mint("id-123", "laptop");
-        jwt.push_str("x");
+        jwt.push('x');
         assert!(signer.verify(&jwt).is_err());
     }
 

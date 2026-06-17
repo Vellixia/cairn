@@ -169,7 +169,7 @@ impl Guard {
         let Some(raw) = self.store.get_meta("task_anchor")? else {
             return Ok(None);
         };
-        let meta: AnchorMeta = serde_json::from_str(&raw).unwrap_or_else(|_| AnchorMeta {
+        let meta: AnchorMeta = serde_json::from_str(&raw).unwrap_or(AnchorMeta {
             goal: raw,
             suspicious: false,
         });
