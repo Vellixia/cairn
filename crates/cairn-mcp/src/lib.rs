@@ -457,10 +457,10 @@ fn err(id: Option<Value>, code: i64, message: &str) -> Value {
 mod tests {
     use super::*;
 
-    /// `None` when `CAIRN_HELIX_URL` is unset (offline runs skip these integration tests).
+    /// `None` when `CAIRN_HELIX_URL` is unset or HelixDB is unreachable (tests skip gracefully).
     fn server() -> Option<McpServer> {
         let cfg = cairn_store::Store::test_config()?;
-        Some(McpServer::new(&cfg).unwrap())
+        McpServer::new(&cfg).ok()
     }
 
     #[test]
