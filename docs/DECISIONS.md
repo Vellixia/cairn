@@ -3,18 +3,29 @@
 Key decisions made during Cairn's development, with rationale. Ordered by recency.
 
 ```mermaid
-timeline
-    title Cairn Architecture Decisions
-    section Design phase
-        ADR-007 : HelixDB as datastore
-        ADR-008 : Bench built into CLI
-        ADR-009 : Rust + self-hosted
-    2026-06-18 : ADR-001 : Binary split
-    2026-06-18 : ADR-002 : OpenCode XDG path
-    2026-06-18 : ADR-003 : tools/list object shape
-    2026-06-18 : ADR-004 : CAIRN_INSECURE
-    2026-06-18 : ADR-005 : Remote proxy path rewriting
-    2026-06-18 : ADR-006 : install → setup rename
+graph LR
+    Design["Design phase"]
+    ADR007["ADR-007<br/>HelixDB as datastore"]
+    ADR008["ADR-008<br/>Bench built into CLI"]
+    ADR009["ADR-009<br/>Rust + self-hosted"]
+
+    ADR001["ADR-001<br/>Binary split"]
+    ADR002["ADR-002<br/>OpenCode XDG path"]
+    ADR003["ADR-003<br/>tools/list object shape"]
+    ADR004["ADR-004<br/>CAIRN_INSECURE"]
+    ADR005["ADR-005<br/>Remote proxy path rewriting"]
+    ADR006["ADR-006<br/>install to setup rename"]
+
+    Design --> ADR007
+    Design --> ADR008
+    Design --> ADR009
+
+    ADR009 --> ADR001
+    ADR001 --> ADR002
+    ADR002 --> ADR003
+    ADR003 --> ADR004
+    ADR004 --> ADR005
+    ADR005 --> ADR006
 ```
 
 ---

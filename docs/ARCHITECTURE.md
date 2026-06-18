@@ -9,15 +9,15 @@ and Docker topology.
 
 ```mermaid
 graph TD
-    Agent["AI Agent<br/>(Claude Code, OpenCode, Cursor, VS Code, Windsurf)"]
-    CLI["cairn-cli (client binary)<br/>McpServer / RemoteProxy<br/>setup · run · hook · sync · pair"]
-    Server["cairn (server binary)<br/>cairn-api: axum REST + web UI<br/>auth: JWT + rate limiting + CORS"]
+    Agent["AI Agent<br/>Claude Code OpenCode Cursor VS Code Windsurf"]
+    CLI["cairn-cli client binary<br/>McpServer / RemoteProxy<br/>setup run hook sync pair"]
+    Server["cairn server binary<br/>cairn-api axum REST + web UI<br/>auth JWT + rate limiting + CORS"]
     Store["cairn-store<br/>HelixBackend + BlobStore"]
     Helix["HelixDB<br/>graph + HNSW vectors"]
     MinIO["MinIO<br/>S3 persistence"]
 
     Agent -->|"MCP stdio<br/>+ lifecycle hooks"| CLI
-    CLI -->|"local store (HelixDB)"| Store
+    CLI -->|"local store HelixDB"| Store
     CLI -->|"HTTP proxy<br/>CAIRN_SERVER + CAIRN_TOKEN"| Server
     Server --> Store
     Store --> Helix
@@ -106,31 +106,47 @@ graph BT
 All tools are exposed via `cairn-cli mcp` (stdio) and mirrored at `/api/tools/list` + `/api/tools/call`.
 
 ```mermaid
-mindmap
-  root((Cairn MCP<br/>16 tools))
-    Context
-      read
-      expand
-    Memory
-      remember
-      recall
-      wakeup
-      consolidate
-    Assembly
-      assemble
-    Guardrails
-      checkpoint
-      rollback
-      checkpoints
-      verify
-      anchor
-    Profile
-      prefer
-      profile
-    Shell
-      compress
-    Sanitization
-      sanitize
+graph TD
+    Root["Cairn MCP — 16 tools"]
+
+    Context["Context"]
+    Memory["Memory"]
+    Assembly["Assembly"]
+    Guardrails["Guardrails"]
+    Profile["Profile"]
+    Shell["Shell"]
+    Sanitization["Sanitization"]
+
+    Root --> Context
+    Root --> Memory
+    Root --> Assembly
+    Root --> Guardrails
+    Root --> Profile
+    Root --> Shell
+    Root --> Sanitization
+
+    Context --> Read["read"]
+    Context --> Expand["expand"]
+
+    Memory --> Remember["remember"]
+    Memory --> Recall["recall"]
+    Memory --> Wakeup["wakeup"]
+    Memory --> Consolidate["consolidate"]
+
+    Assembly --> Assemble["assemble"]
+
+    Guardrails --> Checkpoint["checkpoint"]
+    Guardrails --> Rollback["rollback"]
+    Guardrails --> Checkpoints["checkpoints"]
+    Guardrails --> Verify["verify"]
+    Guardrails --> Anchor["anchor"]
+
+    Profile --> Prefer["prefer"]
+    Profile --> ProfileShow["profile"]
+
+    Shell --> Compress["compress"]
+
+    Sanitization --> Sanitize["sanitize"]
 ```
 
 ### Context (file operations)
@@ -191,12 +207,12 @@ mindmap
 ```mermaid
 flowchart LR
     subgraph Local["Local mode"]
-        Agent1["Agent"] -->|"stdio"| CLI1["cairn-cli mcp<br/>(McpServer)"]
-        CLI1 -->|"Store::open"| Helix1["Local HelixDB"]
+        Agent1["Agent"] -->|"stdio"| CLI1["cairn-cli mcp<br/>McpServer"]
+        CLI1 -->|"Store open"| Helix1["Local HelixDB"]
     end
 
     subgraph Remote["Remote proxy mode"]
-        Agent2["Agent"] -->|"stdio"| CLI2["cairn-cli mcp<br/>(RemoteProxy)"]
+        Agent2["Agent"] -->|"stdio"| CLI2["cairn-cli mcp<br/>RemoteProxy"]
         CLI2 -->|"path rewrite<br/>+ HTTP"| API["cairn-api<br/>/api/tools/call"]
         API --> ServerHelix["Server HelixDB"]
         CLI2 -.->|"CAIRN_SERVER<br/>CAIRN_TOKEN"| Config["env vars"]
@@ -260,11 +276,11 @@ All `/api/*` routes (except `/api/health` and `/api/pair/claim`) require `Author
 ```mermaid
 graph TD
     subgraph Compose["docker compose up -d"]
-        Guard["minio-guard<br/>(one-shot)"]
-        MinIOInit["minio-init<br/>(one-shot: create bucket)"]
-        MinIO["minio<br/>S3 storage<br/>:9000 internal"]
-        Helix["helix<br/>HelixDB graph + vectors<br/>:6969 → :8080"]
-        Cairn["cairn<br/>Cairn server + web UI<br/>:7777"]
+        Guard["minio-guard<br/>one-shot"]
+        MinIOInit["minio-init<br/>one-shot, create bucket"]
+        MinIO["minio<br/>S3 storage<br/>port 9000 internal"]
+        Helix["helix<br/>HelixDB graph + vectors<br/>port 6969 to 8080"]
+        Cairn["cairn<br/>Cairn server + web UI<br/>port 7777"]
 
         Guard -->|"refuses insecure creds"| MinIO
         MinIOInit -->|"creates helix-db bucket"| MinIO
@@ -273,11 +289,11 @@ graph TD
     end
 
     HostProject["Host project dir<br/>(read-only mount)"]
-    HostProject -.->|"/workspace:ro"| Cairn
+    HostProject -.->|"read-only mount"| Cairn
 
     Host["Host machine"]
-    Host -->|":7777"| Cairn
-    Host -->|":6969"| Helix
+    Host -->|"port 7777"| Cairn
+    Host -->|"port 6969"| Helix
 ```
 
 | Service | Image | Role | Port |
@@ -431,7 +447,7 @@ Key variables: `CAIRN_DATA_DIR`, `CAIRN_HOST`, `CAIRN_PORT`, `CAIRN_HELIX_URL`, 
 
 ```mermaid
 graph TD
-    Server["Cairn Server<br/>cairn serve --host 0.0.0.0<br/>:7777 + web UI"]
+    Server["Cairn Server<br/>cairn serve --host 0.0.0.0<br/>port 7777 + web UI"]
     Helix["HelixDB<br/>graph + vectors"]
     MinIO["MinIO<br/>S3 persistence"]
 
@@ -442,9 +458,9 @@ graph TD
     Device2["Desktop<br/>cairn-cli mcp<br/>+ OpenCode MCP"]
     Device3["Server / NAS<br/>cairn-cli mcp<br/>+ Cursor MCP"]
 
-    Device1 -.->|"pair + sync<br/>HTTP :7777"| Server
-    Device2 -.->|"pair + sync<br/>HTTP :7777"| Server
-    Device3 -.->|"pair + sync<br/>HTTP :7777"| Server
+    Device1 -.->|"pair + sync<br/>HTTP port 7777"| Server
+    Device2 -.->|"pair + sync<br/>HTTP port 7777"| Server
+    Device3 -.->|"pair + sync<br/>HTTP port 7777"| Server
 ```
 
 Run one Cairn server for all your devices, or keep a server per device and sync between them.

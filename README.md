@@ -57,27 +57,39 @@ time**. Cairn fixes that.
 ## Five pillars
 
 ```mermaid
-mindmap
-  root((Cairn))
-    Remember
-      cross-session
-      cross-device
-      cross-agent
-    Compress
-      file reads
-      shell output
-      lossless
-    Assemble
-      token budget
-      anti-rot
-    Reliable
-      verify edits
-      checkpoint
-      rollback
-    Smarter together
-      preferences
-      collective
-      federation
+graph TD
+    Root["Cairn"]
+
+    Remember["Remember"]
+    Compress["Compress"]
+    Assemble["Assemble"]
+    Reliable["Reliable"]
+    Smarter["Smarter together"]
+
+    Root --> Remember
+    Root --> Compress
+    Root --> Assemble
+    Root --> Reliable
+    Root --> Smarter
+
+    Remember --> R1["cross-session"]
+    Remember --> R2["cross-device"]
+    Remember --> R3["cross-agent"]
+
+    Compress --> C1["file reads"]
+    Compress --> C2["shell output"]
+    Compress --> C3["lossless"]
+
+    Assemble --> A1["token budget"]
+    Assemble --> A2["anti-rot"]
+
+    Reliable --> Re1["verify edits"]
+    Reliable --> Re2["checkpoint"]
+    Reliable --> Re3["rollback"]
+
+    Smarter --> S1["preferences"]
+    Smarter --> S2["collective"]
+    Smarter --> S3["federation"]
 ```
 
 1. **Remember** — decisions and rationale persist across sessions, devices, and agents.

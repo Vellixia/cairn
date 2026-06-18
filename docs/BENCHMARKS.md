@@ -26,11 +26,10 @@ Measured on Cairn's own `crates/` (25 Rust source files):
 
 ```mermaid
 %%{init: {"theme": "default"}}%%
-xychart-beta
-    title "Token Savings (%) — Cairn Compression"
-    x-axis ["AST outline reads", "Re-read cache", "Shell output"]
-    y-axis "Percentage saved" 0 --> 100
-    bar [90, 99.7, 99]
+pie title Token savings (%)
+    "AST outline reads — 90%" : 90
+    "Re-read cache — 99.7%" : 99.7
+    "Shell output — 99%" : 99
 ```
 
 | Mechanism | Before | After | Saved |

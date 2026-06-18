@@ -49,27 +49,39 @@ not the model's IQ.** That is exactly the gap Cairn fills, and why "make a dumb 
 achievable. Failures group into five classes:
 
 ```mermaid
-mindmap
-  root((Agent failures))
-    A. Context window
-      context rot
-      lost-in-the-middle
-      lossy compaction
-    B. Long-horizon
-      error compounding
-      silent corruption
-      drift
-    C. Continuity
-      cross-session amnesia
-      cross-device silos
-      re-reading files
-    D. Knowledge
-      weak models lack context
-      knowledge siloed per user
-      memory-only tools
-    E. Multi-agent
-      coordination failures
-      scoped out of v1
+graph TD
+    Root["Agent failures"]
+
+    A["A. Context window"]
+    B["B. Long-horizon"]
+    C["C. Continuity"]
+    D["D. Knowledge"]
+    E["E. Multi-agent"]
+
+    Root --> A
+    Root --> B
+    Root --> C
+    Root --> D
+    Root --> E
+
+    A --> A1["context rot"]
+    A --> A2["lost-in-the-middle"]
+    A --> A3["lossy compaction"]
+
+    B --> B1["error compounding"]
+    B --> B2["silent corruption"]
+    B --> B3["drift"]
+
+    C --> C1["cross-session amnesia"]
+    C --> C2["cross-device silos"]
+    C --> C3["re-reading files"]
+
+    D --> D1["weak models lack context"]
+    D --> D2["knowledge siloed per user"]
+    D --> D3["memory-only tools"]
+
+    E --> E1["coordination failures"]
+    E --> E2["scoped out of v1"]
 ```
 
 **A. Context-window failures (architectural — bigger windows don't help):**
@@ -119,28 +131,40 @@ multi-agent. → Cairn targets **single-agent reliability first**; shared-contex
 ## Product Vision — five pillars
 
 ```mermaid
-mindmap
-  root((Cairn<br/>5 pillars))
-    Remember
-      cross-session memory
-      cross-device sync
-      decisions + rationale
-    Compress
-      file reads (AST)
-      shell output
-      lossless via expand
-    Assemble
-      token-budgeted
-      edge-ordered
-      anti-context-rot
-    Reliable
-      verify vs originals
-      drift detection
-      checkpoint/rollback
-    Smarter together
-      preference learning
-      collective knowledge
-      opt-in federation
+graph TD
+    Root["Cairn — 5 pillars"]
+
+    Remember["Remember"]
+    Compress["Compress"]
+    Assemble["Assemble"]
+    Reliable["Reliable"]
+    Smarter["Smarter together"]
+
+    Root --> Remember
+    Root --> Compress
+    Root --> Assemble
+    Root --> Reliable
+    Root --> Smarter
+
+    Remember --> R1["cross-session memory"]
+    Remember --> R2["cross-device sync"]
+    Remember --> R3["decisions + rationale"]
+
+    Compress --> C1["file reads — AST"]
+    Compress --> C2["shell output"]
+    Compress --> C3["lossless via expand"]
+
+    Assemble --> A1["token-budgeted"]
+    Assemble --> A2["edge-ordered"]
+    Assemble --> A3["anti-context-rot"]
+
+    Reliable --> Re1["verify vs originals"]
+    Reliable --> Re2["drift detection"]
+    Reliable --> Re3["checkpoint / rollback"]
+
+    Smarter --> S1["preference learning"]
+    Smarter --> S2["collective knowledge"]
+    Smarter --> S3["opt-in federation"]
 ```
 
 1. **Remember** — never start cold; decisions/tasks/rationale persist across sessions, devices, agents.
@@ -174,8 +198,8 @@ federation** as one self-hostable **Rust** binary. The *integration* is the moat
 ```mermaid
 flowchart LR
     subgraph Input["Sources"]
-        Files["Files<br/>(read)"]
-        Shell["Shell output<br/>(compress)"]
+        Files["Files<br/>read"]
+        Shell["Shell output<br/>compress"]
         Mem["Memory recall"]
         Prompt["Prompt query"]
     end
@@ -187,8 +211,8 @@ flowchart LR
         Asm["Assembler<br/>cairn-assemble"]
     end
 
-    Blob["Blob Store<br/>(content-hash<br/>full fidelity)"]
-    Agent["Agent context window<br/>(compressed view + handles)"]
+    Blob["Blob Store<br/>content-hash<br/>full fidelity"]
+    Agent["Agent context window<br/>compressed view + handles"]
 
     Files --> AST --> Agent
     Shell --> Filter --> Agent
