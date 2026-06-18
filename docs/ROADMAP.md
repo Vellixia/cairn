@@ -2,6 +2,46 @@
 
 Status tracker for Cairn development. Mapped to the phases defined in [PLAN.md](PLAN.md).
 
+```mermaid
+gantt
+    title Cairn Development Phases
+    dateFormat 2026-01-01
+    axisFormat %b
+
+    section Phase 0 — Scaffold
+    Cargo workspace + crates       :done, p0a, 2026-01-01, 30d
+    Next.js web app                :done, p0b, 2026-01-01, 30d
+    Docker Compose stack           :done, p0c, 2026-01-01, 30d
+    CI pipeline                    :done, p0d, 2026-01-01, 30d
+
+    section Phase 1 — Thin Slice
+    Context: read + cache + expand :done, p1a, 2026-02-01, 45d
+    Memory: remember + recall      :done, p1b, 2026-02-01, 45d
+    Shell: compress + recover      :done, p1c, 2026-02-01, 45d
+    MCP server (stdio)             :done, p1d, 2026-02-01, 45d
+    REST API + web UI              :done, p1e, 2026-02-01, 45d
+    Bench command                  :done, p1f, 2026-02-01, 45d
+
+    section Phase 2 — Server + Guard
+    JWT device tokens              :done, p2a, 2026-03-01, 60d
+    Guard: verify + anchor + cp    :done, p2b, 2026-03-01, 60d
+    Profile: preference learning   :done, p2c, 2026-03-01, 60d
+    Binary split + setup           :done, p2d, 2026-03-01, 60d
+    OpenCode MCP integration       :done, p2e, 2026-03-01, 60d
+    Security hardening (P0-P2)     :done, p2f, 2026-03-01, 60d
+
+    section Phase 3 — Collective
+    Export/import sanitized bundles :done, p3a, 2026-04-01, 30d
+    Pool contribute/pull           :done, p3b, 2026-04-01, 30d
+    Full 4-tier consolidation      :active, p3c, 2026-04-15, 60d
+    Hybrid search (BM25+vec+graph) :p3d, 2026-05-01, 60d
+    Health checks in Compose       :p3e, 2026-05-01, 30d
+    CI smoke test                  :p3f, 2026-05-01, 30d
+    LongMemEval benchmarks         :p3g, 2026-05-15, 60d
+    One-click deploy templates     :p3h, 2026-06-01, 45d
+    Multi-platform release binaries :p3i, 2026-06-01, 45d
+```
+
 ---
 
 ## Phase 0 — Scaffold

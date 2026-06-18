@@ -7,36 +7,21 @@ and Docker topology.
 
 ## System Overview
 
-```
-  Agent (Claude Code, OpenCode, Cursor, VS Code, Windsurf)
-    │  MCP stdio (cairn-cli mcp)
-    │  + lifecycle hooks (Claude Code only)
-    ▼
-  ┌─────────────── cairn-cli (client binary) ───────────────────┐
-  │  McpServer (local)  or  RemoteProxy (HTTP → server)        │
-  │  cairn-cli setup <agent>  → writes MCP config + rules       │
-  │  cairn-cli run/hook/sync/pair/…                            │
-  └──────────────────────────┬──────────────────────────────────┘
-                             │ local store (HelixDB)
-                             │ or HTTP proxy (CAIRN_SERVER + CAIRN_TOKEN)
-                             ▼
-  ┌─────────────── cairn (server binary) ──────────────────────┐
-  │  cairn-api (axum REST + embedded web UI)                    │
-  │  auth middleware (JWT device tokens, HMAC)                 │
-  │  rate limiting + CORS                                      │
-  └──────────────────────────┬──────────────────────────────────┘
-                             │
-                             ▼
-  ┌─────────────── cairn-store ────────────────────────────────┐
-  │  HelixBackend (HelixDB graph + vector store)              │
-  │  BlobStore (content-addressed, on-disk)                   │
-  └──────────────────────────┬──────────────────────────────────┘
-                             │
-                             ▼
-                    HelixDB (graph + HNSW vectors)
-                             │
-                             ▼
-                    MinIO (S3 persistence layer)
+```mermaid
+graph TD
+    Agent["AI Agent<br/>(Claude Code, OpenCode, Cursor, VS Code, Windsurf)"]
+    CLI["cairn-cli (client binary)<br/>McpServer / RemoteProxy<br/>setup · run · hook · sync · pair"]
+    Server["cairn (server binary)<br/>cairn-api: axum REST + web UI<br/>auth: JWT + rate limiting + CORS"]
+    Store["cairn-store<br/>HelixBackend + BlobStore"]
+    Helix["HelixDB<br/>graph + HNSW vectors"]
+    MinIO["MinIO<br/>S3 persistence"]
+
+    Agent -->|"MCP stdio<br/>+ lifecycle hooks"| CLI
+    CLI -->|"local store (HelixDB)"| Store
+    CLI -->|"HTTP proxy<br/>CAIRN_SERVER + CAIRN_TOKEN"| Server
+    Server --> Store
+    Store --> Helix
+    Helix --> MinIO
 ```
 
 ---
@@ -52,22 +37,47 @@ and Docker topology.
 
 ## Cargo Workspace — 14 Crates
 
-### Dependency Graph (simplified)
+### Dependency Graph
 
-```
-cairn-core ←── cairn-store ←── cairn-context
-    ↑              ↑              ↑
-    │              │              │
-cairn-embed    cairn-memory   cairn-assemble
-    ↑              ↑              ↑
-    │              │              │
-    └──────── cairn-mcp ──────────┘
-                   ↑
-                   │
-              cairn-api ←── cairn-server
-                   ↑
-                   │
-              cairn-cli
+```mermaid
+graph BT
+    core["cairn-core<br/>types · config · errors"]
+    store["cairn-store<br/>HelixDB + BlobStore"]
+    context["cairn-context<br/>read · cache · AST · assemble"]
+    memory["cairn-memory<br/>4-tier · recall · decay"]
+    guard["cairn-guard<br/>verify · anchor · checkpoint"]
+    shell["cairn-shell<br/>compress · recover"]
+    profile["cairn-profile<br/>preferences"]
+    assemble["cairn-assemble<br/>token-budget assembly"]
+    share["cairn-share<br/>sanitization"]
+    embed["cairn-embed<br/>embeddings"]
+    mcp["cairn-mcp<br/>MCP server (stdio)"]
+    api["cairn-api<br/>REST API + web UI"]
+    server["cairn-server<br/>cairn binary"]
+    cli["cairn-cli<br/>cairn-cli binary"]
+
+    core --> store
+    core --> embed
+    core --> share
+    store --> context
+    store --> memory
+    store --> guard
+    store --> shell
+    store --> profile
+    memory --> assemble
+    context --> mcp
+    memory --> mcp
+    guard --> mcp
+    shell --> mcp
+    profile --> mcp
+    share --> mcp
+    embed --> mcp
+    assemble --> mcp
+    mcp --> api
+    core --> api
+    api --> server
+    mcp --> cli
+    api --> cli
 ```
 
 ### Crate Roles
@@ -94,6 +104,34 @@ cairn-embed    cairn-memory   cairn-assemble
 ## MCP Tool Surface (16 tools)
 
 All tools are exposed via `cairn-cli mcp` (stdio) and mirrored at `/api/tools/list` + `/api/tools/call`.
+
+```mermaid
+mindmap
+  root((Cairn MCP<br/>16 tools))
+    Context
+      read
+      expand
+    Memory
+      remember
+      recall
+      wakeup
+      consolidate
+    Assembly
+      assemble
+    Guardrails
+      checkpoint
+      rollback
+      checkpoints
+      verify
+      anchor
+    Profile
+      prefer
+      profile
+    Shell
+      compress
+    Sanitization
+      sanitize
+```
 
 ### Context (file operations)
 
@@ -150,6 +188,21 @@ All tools are exposed via `cairn-cli mcp` (stdio) and mirrored at `/api/tools/li
 
 ## MCP Modes
 
+```mermaid
+flowchart LR
+    subgraph Local["Local mode"]
+        Agent1["Agent"] -->|"stdio"| CLI1["cairn-cli mcp<br/>(McpServer)"]
+        CLI1 -->|"Store::open"| Helix1["Local HelixDB"]
+    end
+
+    subgraph Remote["Remote proxy mode"]
+        Agent2["Agent"] -->|"stdio"| CLI2["cairn-cli mcp<br/>(RemoteProxy)"]
+        CLI2 -->|"path rewrite<br/>+ HTTP"| API["cairn-api<br/>/api/tools/call"]
+        API --> ServerHelix["Server HelixDB"]
+        CLI2 -.->|"CAIRN_SERVER<br/>CAIRN_TOKEN"| Config["env vars"]
+    end
+```
+
 ### Local mode (default)
 `cairn-cli mcp` opens the local store (`Store::open` → HelixDB). Requires `CAIRN_HELIX_URL`.
 All tools run locally.
@@ -204,8 +257,27 @@ All `/api/*` routes (except `/api/health` and `/api/pair/claim`) require `Author
 
 ## Docker Topology
 
-```
-docker compose up -d
+```mermaid
+graph TD
+    subgraph Compose["docker compose up -d"]
+        Guard["minio-guard<br/>(one-shot)"]
+        MinIOInit["minio-init<br/>(one-shot: create bucket)"]
+        MinIO["minio<br/>S3 storage<br/>:9000 internal"]
+        Helix["helix<br/>HelixDB graph + vectors<br/>:6969 → :8080"]
+        Cairn["cairn<br/>Cairn server + web UI<br/>:7777"]
+
+        Guard -->|"refuses insecure creds"| MinIO
+        MinIOInit -->|"creates helix-db bucket"| MinIO
+        MinIO --> Helix
+        Helix --> Cairn
+    end
+
+    HostProject["Host project dir<br/>(read-only mount)"]
+    HostProject -.->|"/workspace:ro"| Cairn
+
+    Host["Host machine"]
+    Host -->|":7777"| Cairn
+    Host -->|":6969"| Helix
 ```
 
 | Service | Image | Role | Port |
@@ -246,6 +318,30 @@ volumes:
 ---
 
 ## Security Boundaries
+
+```mermaid
+flowchart TD
+    Request["Incoming request"]
+    TLSGate{"TLS gate<br/>non-loopback?"}
+    Auth{"Auth<br/>JWT valid?"}
+    RateLimit{"Rate limit<br/>60/min?"}
+    Workspace{"Workspace root<br/>path inside?"}
+    Sanitize{"Sanitization<br/>on share/export?"}
+    Tool["Tool executes"]
+    Rejected["Rejected"]
+
+    Request --> TLSGate
+    TLSGate -->|"no TLS + no INSECURE"| Rejected
+    TLSGate -->|"TLS or loopback or INSECURE=1"| Auth
+    Auth -->|"missing/invalid"| Rejected
+    Auth -->|"valid JWT"| RateLimit
+    RateLimit -->|"over limit"| Rejected
+    RateLimit -->|"under limit"| Workspace
+    Workspace -->|"outside root"| Rejected
+    Workspace -->|"inside root"| Sanitize
+    Sanitize -->|"share/export path"| Tool
+    Sanitize -->|"normal path"| Tool
+```
 
 | Boundary | Mechanism |
 |---|---|

@@ -21,6 +21,27 @@ Cairn sits between your AI coding agents (Claude Code, Codex, OpenCode, Cursor, 
 It runs as one small server you self-host once, and every device + agent connects to it through a
 single MCP endpoint plus lifecycle hooks.
 
+```mermaid
+flowchart LR
+    subgraph Agents["Your agents"]
+        CC["Claude Code"]
+        OC["OpenCode"]
+        CUR["Cursor"]
+        VS["VS Code"]
+        WS["Windsurf"]
+    end
+
+    CLI["cairn-cli<br/>MCP + hooks + setup"]
+    Server["cairn server<br/>REST API + web UI"]
+    Store["HelixDB<br/>graph + vectors<br/>+ blob store"]
+
+    Agents -->|"MCP stdio"| CLI
+    CLI -->|"local or<br/>remote proxy"| Server
+    Server --> Store
+
+    CLI -->|"remember / recall<br/>read / expand<br/>verify / checkpoint"| Store
+```
+
 ## Why
 
 AI agents fail on long, multi-session work in ways bigger context windows don't fix:
@@ -34,6 +55,32 @@ The bottleneck usually isn't the model's IQ — it's the **context fed to it** a
 time**. Cairn fixes that.
 
 ## The five pillars
+
+## The five pillars
+
+```mermaid
+mindmap
+  root((Cairn))
+    Remember
+      cross-session
+      cross-device
+      cross-agent
+    Compress
+      file reads
+      shell output
+      lossless
+    Assemble
+      token budget
+      anti-rot
+    Reliable
+      verify edits
+      checkpoint
+      rollback
+    Smarter together
+      preferences
+      collective
+      federation
+```
 
 1. **Remember** — decisions, tasks, and rationale persist across sessions, devices, and agents.
 2. **Compress without loss** — files, shell output, and responses shrink in the window but stay
@@ -49,6 +96,15 @@ time**. Cairn fixes that.
 ## Proof
 
 Run **`cairn-cli bench`** on your own repo to see the savings. Measured on Cairn's own `crates/` (25 files):
+
+```mermaid
+%%{init: {"theme": "default"}}%%
+xychart-beta
+    title "Token Savings (%) — Cairn Compression"
+    x-axis ["AST reads", "Re-read cache", "Shell output"]
+    y-axis "Saved %" 0 --> 100
+    bar [90, 99.7, 99]
+```
 
 | Mechanism | Before | After | Saved |
 |---|---|---|---|
@@ -112,6 +168,24 @@ Then run `cairn serve` and open <http://127.0.0.1:7777>. The `cairn` binary is t
 Cairn is **server + clients**. Run one Cairn server where it's always reachable (a home server,
 NAS, VPS, or `docker compose up`); each personal device runs `cairn-cli` (its own store, MCP, and
 hooks) and **pairs/syncs to the server's URL**.
+
+```mermaid
+graph TD
+    Server["Cairn Server<br/>cairn serve --host 0.0.0.0<br/>:7777 + web UI"]
+    Helix["HelixDB<br/>graph + vectors"]
+    MinIO["MinIO<br/>S3 persistence"]
+
+    Server --> Helix
+    Helix --> MinIO
+
+    Device1["Laptop<br/>cairn-cli mcp<br/>+ Claude Code hooks"]
+    Device2["Desktop<br/>cairn-cli mcp<br/>+ OpenCode MCP"]
+    Device3["Server / NAS<br/>cairn-cli mcp<br/>+ Cursor MCP"]
+
+    Device1 -.->|"pair + sync<br/>HTTP :7777"| Server
+    Device2 -.->|"pair + sync<br/>HTTP :7777"| Server
+    Device3 -.->|"pair + sync<br/>HTTP :7777"| Server
+```
 
 ```sh
 # On the server — expose it on the network and note its URL, e.g. http://192.168.1.10:7777

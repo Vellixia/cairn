@@ -24,6 +24,15 @@ recoverable via `expand`.
 
 Measured on Cairn's own `crates/` (25 Rust source files):
 
+```mermaid
+%%{init: {"theme": "default"}}%%
+xychart-beta
+    title "Token Savings (%) — Cairn Compression"
+    x-axis ["AST outline reads", "Re-read cache", "Shell output"]
+    y-axis "Percentage saved" 0 --> 100
+    bar [90, 99.7, 99]
+```
+
 | Mechanism | Before | After | Saved |
 |---|---|---|---|
 | AST outline reads (feed code as structure) | ~59,052 tok | ~5,894 tok | **90%** |
