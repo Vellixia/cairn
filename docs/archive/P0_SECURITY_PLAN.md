@@ -1,5 +1,8 @@
 # P0 Security & Build Fixes
 
+> **All items completed.** This file is superseded by [Roadmap](../ROADMAP.md) for current status.
+> Kept here as a historical record of the P0 remediation plan.
+
 This branch fixes the critical fresh-clone build break and documents the P0 security work that follows.
 
 ## Fixed in this PR

@@ -1,5 +1,8 @@
 # Cairn Security + Architecture Deep Audit
 
+> **Historical snapshot (2026-06-15, commit `be30239`).** See [REPORT.md](REPORT.md) for
+> current fix status. This file is kept as the raw detail behind the consolidated report.
+
 Scope: the Cairn monorepo at `crates/cairn-*`, with particular focus on auth/tokens, HelixDB client,
 MCP tools, embedding API keys, secret redaction, and prompt-injection surfaces.
 

@@ -1,5 +1,8 @@
 # Cairn Dependency + CI/Supply-Chain Audit
 
+> **Historical snapshot (2026-06-15, commit `be30239`).** See [REPORT.md](REPORT.md) for
+> current fix status. This file is kept as the raw detail behind the consolidated report.
+
 **Scope:** repo `/home/andres/Cairn` (commit `be30239`, branch `main`)  
 **Date:** 2026-06-15  
 **Tooling:** manual Cargo.lock analysis; `cargo audit` was **not installed**, so no automated advisory/yanked-crate scan was possible.

@@ -1,5 +1,8 @@
 # Cairn Build, Runtime, and Config Audit
 
+> **Historical snapshot (2026-06-15, commit `be30239`).** See [REPORT.md](REPORT.md) for
+> current fix status. This file is kept as the raw detail behind the consolidated report.
+
 **Scope:** repo `/home/andres/Cairn` (commit `be30239`, branch `main`)  
 **Date:** 2026-06-15  
 **Auditor:** Sleipnir (with Odin gap-fill)
