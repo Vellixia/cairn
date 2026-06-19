@@ -1,6 +1,12 @@
-//! The minimal branded page served at `/`. This is a placeholder control plane: it proves the
-//! engine works in a browser (live health/stats, remember, recall) until the full Next.js app is
-//! embedded. Kept dependency-free (inline CSS/JS) so the single binary is truly self-contained.
+//! The minimal branded page served at `/` when `web/out/` is missing (no Next.js build).
+//!
+//! Intentionally diagnostic-only — never calls any authed endpoint. The only network call it
+//! makes is to the public `/api/health` and `/api/auth/status` so the page can tell the user
+//! whether to go to `/login` (admin already configured) or `/setup` (first run).
+//!
+//! Once the dashboard is built and embedded via `rust-embed`, this fallback is no longer served
+//! (the Next.js export serves `/` instead). It exists for fresh checkouts and the
+//! `cargo run -p cairn-server -- serve` zero-deps path.
 
 pub const INDEX_HTML: &str = r###"<!doctype html>
 <html lang="en">
@@ -17,36 +23,26 @@ pub const INDEX_HTML: &str = r###"<!doctype html>
   body{margin:0;background:radial-gradient(1200px 600px at 70% -10%, #16202b 0%, var(--ink) 55%);
     color:var(--offwhite);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif;
     min-height:100vh}
-  .wrap{max-width:860px;margin:0 auto;padding:48px 20px 80px}
-  header{display:flex;align-items:center;gap:14px;margin-bottom:8px}
-  .logo{width:40px;height:40px;flex:0 0 auto}
+  .wrap{max-width:760px;margin:0 auto;padding:48px 20px 80px}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+  .logo{width:44px;height:44px;flex:0 0 auto}
   h1{font-size:30px;margin:0;letter-spacing:-.02em}
-  .tag{color:var(--slate);margin:2px 0 0;font-size:14px}
-  .hero{margin:30px 0 26px}
-  .hero p{font-size:18px;color:#cdd5e0;margin:.4em 0}
-  .accent{color:var(--ember)}
-  .pillars{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px}
-  .pill{border:1px solid var(--line);background:var(--surface);border-radius:999px;
-    padding:5px 12px;font-size:12.5px;color:#b9c2cf}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:26px}
-  @media(max-width:680px){.grid{grid-template-columns:1fr}}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
-  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--slate);margin:0 0 12px}
-  .stat{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--line)}
+  .tag{color:var(--slate);margin:4px 0 0;font-size:14px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
+  .pill{display:inline-block;border:1px solid var(--line);background:var(--surface2);
+    border-radius:999px;padding:4px 10px;font-size:12.5px;color:#b9c2cf;margin-right:6px}
+  .cta{display:inline-block;margin-top:14px;background:var(--ember);color:#1a1206;border:0;
+    border-radius:9px;padding:10px 18px;font-weight:700;text-decoration:none;font-size:14px}
+  .cta.ghost{background:transparent;color:var(--offwhite);border:1px solid var(--line);margin-left:8px}
+  pre.codeblock{background:var(--surface2);border:1px solid var(--line);border-radius:9px;
+    padding:12px 14px;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    color:#cdd5e0;overflow:auto;margin:10px 0 0}
+  .stat{display:flex;justify-content:space-between;padding:4px 0;font-size:13.5px;
+    border-bottom:1px dashed var(--line)}
   .stat:last-child{border-bottom:0}
-  .stat b{color:var(--teal);font-variant-numeric:tabular-nums}
-  textarea,input{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--offwhite);
-    border-radius:9px;padding:10px;font:inherit;resize:vertical}
-  button{margin-top:10px;background:var(--ember);color:#1a1206;border:0;border-radius:9px;
-    padding:9px 16px;font-weight:600;cursor:pointer}
-  button.ghost{background:transparent;color:var(--offwhite);border:1px solid var(--line)}
-  .results{margin-top:12px;display:flex;flex-direction:column;gap:8px}
-  .mem{background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:13.5px}
-  .mem .meta{color:var(--slate);font-size:11.5px;margin-top:4px}
-  .score{color:var(--ember);font-variant-numeric:tabular-nums}
-  footer{margin-top:40px;color:var(--slate);font-size:13px}
+  .stat b{color:var(--teal);font-variant-numeric:tabular-nums;font-weight:600}
+  footer{margin-top:32px;color:var(--slate);font-size:12.5px}
   a{color:var(--teal)}
-  code{background:var(--surface2);padding:2px 6px;border-radius:6px;color:#cdd5e0}
 </style>
 </head>
 <body>
@@ -61,87 +57,82 @@ pub const INDEX_HTML: &str = r###"<!doctype html>
     </svg>
     <div>
       <h1>Cairn</h1>
-      <p class="tag">The open-source context &amp; reliability layer for AI agents</p>
+      <p class="tag">Self-hosted context &amp; reliability layer for AI agents.</p>
     </div>
   </header>
 
-  <section class="hero">
-    <p><strong>Make any model smart.</strong> Remember everything · feed less, not more · stay
-       reliable on long tasks · get smarter together — self-hosted, one Rust binary,
-       <span class="accent">with no context ever lost</span>.</p>
-    <div class="pillars">
-      <span class="pill">Remember</span>
-      <span class="pill">Compress · no loss</span>
-      <span class="pill">Assemble lean context</span>
-      <span class="pill">Stay reliable</span>
-      <span class="pill">Smarter together</span>
-    </div>
-  </section>
-
-  <div class="grid">
-    <div class="card">
-      <h2>Server</h2>
-      <div class="stat"><span>Status</span><b id="status">…</b></div>
-      <div class="stat"><span>Version</span><b id="version">…</b></div>
-      <div class="stat"><span>Memories stored</span><b id="memcount">…</b></div>
-      <p style="color:var(--slate);font-size:12.5px;margin:12px 0 0">
-        API: <code>/api/health</code> · <code>/api/memory/recall?q=…</code> ·
-        <code>/api/context/read?path=…</code>
-      </p>
-    </div>
-
-    <div class="card">
-      <h2>Remember something</h2>
-      <textarea id="rememberText" rows="3" placeholder="e.g. We chose SQLite + a content-hash blob store so compression stays lossless."></textarea>
-      <button onclick="remember()">Remember</button>
-      <div id="rememberOut" style="color:var(--teal);font-size:12.5px;margin-top:8px"></div>
-    </div>
+  <div class="card">
+    <h2 style="margin:0 0 6px;font-size:16px">Server status</h2>
+    <div class="stat"><span>Health</span><b id="health">checking…</b></div>
+    <div class="stat"><span>Version</span><b id="version">…</b></div>
+    <div class="stat"><span>Admin</span><b id="admin">checking…</b></div>
+    <div class="stat"><span>Next step</span><b id="next">…</b></div>
   </div>
 
-  <div class="card" style="margin-top:16px">
-    <h2>Recall</h2>
-    <input id="recallQuery" placeholder="search your memory… e.g. storage decision" onkeydown="if(event.key==='Enter')recall()" />
-    <button class="ghost" onclick="recall()">Recall</button>
-    <div class="results" id="recallOut"></div>
+  <div class="card">
+    <h2 style="margin:0 0 6px;font-size:16px">Open the dashboard</h2>
+    <p style="color:var(--slate);margin:0 0 6px;font-size:13.5px">
+      The full dashboard ships with the Next.js build. If you see this page, the
+      binary is serving its built-in fallback because <code>web/out/</code> is missing.
+    </p>
+    <a id="primaryCta" class="cta" href="/login">Open dashboard</a>
+    <a class="cta ghost" href="/api/health" target="_blank" rel="noopener">/api/health</a>
+    <pre class="codeblock">curl -fsSL https://raw.githubusercontent.com/Vellixia/cairn/main/scripts/install.sh | sh</pre>
   </div>
 
-  <footer>
-    🪨 Early development · this page is a placeholder control plane; the full dashboard is coming.
-    &nbsp;·&nbsp; <a href="https://github.com/Vellixia/cairn">GitHub</a>
-  </footer>
+  <div class="card">
+    <h2 style="margin:0 0 6px;font-size:16px">Issue a device token (CLI)</h2>
+    <p style="color:var(--slate);margin:0 0 6px;font-size:13.5px">
+      From the server host:
+    </p>
+    <pre class="codeblock">cairn-server token create my-laptop --scope write</pre>
+    <p style="color:var(--slate);margin:10px 0 0;font-size:13px">
+      Then on the device:&nbsp;
+      <code>cairn sync --server http://&lt;host&gt;:7777 --token &lt;jwt&gt;</code>
+    </p>
+  </div>
+
+  <footer>🪨 Cairn · Apache-2.0 · every traveler adds a stone.</footer>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
-async function refresh(){
-  try{
+async function probe(){
+  // /api/health is the only endpoint we ever call from the fallback page. It is public.
+  let healthy = false;
+  try {
     const h = await (await fetch('/api/health')).json();
-    $('status').textContent = h.status; $('version').textContent = 'v'+h.version;
-    const s = await (await fetch('/api/stats')).json();
-    $('memcount').textContent = s.memories;
-  }catch(e){ $('status').textContent = 'offline'; }
+    $('health').textContent = h.status;
+    $('version').textContent = 'v' + h.version;
+    healthy = h.status === 'ok';
+  } catch (e) {
+    $('health').textContent = 'unreachable';
+  }
+  if (!healthy) {
+    $('admin').textContent = 'unknown';
+    $('next').textContent = 'start the server';
+    $('primaryCta').textContent = 'Start server';
+    $('primaryCta').removeAttribute('href');
+    return;
+  }
+  try {
+    const a = await (await fetch('/api/auth/status')).json();
+    $('admin').textContent = a.admin_exists ? 'configured' : 'not configured';
+    if (a.setup_required) {
+      $('next').textContent = 'first-run setup';
+      $('primaryCta').textContent = 'Create admin';
+      $('primaryCta').href = '/setup';
+    } else {
+      $('next').textContent = 'sign in';
+      $('primaryCta').textContent = 'Sign in';
+      $('primaryCta').href = '/login';
+    }
+  } catch (e) {
+    $('admin').textContent = 'unknown';
+    $('next').textContent = 'sign in';
+  }
 }
-async function remember(){
-  const content = $('rememberText').value.trim();
-  if(!content) return;
-  const r = await fetch('/api/memory', {method:'POST',headers:{'content-type':'application/json'},
-    body: JSON.stringify({content})});
-  const m = await r.json();
-  $('rememberOut').textContent = 'stored ('+m.kind+'/'+m.tier+') · id '+m.id.slice(0,8);
-  $('rememberText').value=''; refresh();
-}
-async function recall(){
-  const q = $('recallQuery').value.trim();
-  const r = await fetch('/api/memory/recall?limit=8&q='+encodeURIComponent(q));
-  const hits = await r.json();
-  $('recallOut').innerHTML = hits.length ? hits.map(h =>
-    `<div class="mem">${escapeHtml(h.memory.content)}
-       <div class="meta"><span class="score">${h.score.toFixed(2)}</span> ·
-       ${h.memory.kind} · ${h.memory.tier} · ${new Date(h.memory.created_at).toLocaleString()}</div></div>`
-  ).join('') : '<div style="color:var(--slate);font-size:13px">no matches yet</div>';
-}
-function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-refresh();
+probe();
 </script>
 </body>
 </html>"###;
