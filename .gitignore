@@ -8,9 +8,6 @@
 /web/out/_next/static/**/*.js.map
 /web/dist
 
-# TypeScript build cache
-*.tsbuildinfo
-
 # Local dogfood testing artifacts
 /dogfood-output
 
