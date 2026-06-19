@@ -12,6 +12,8 @@ mod security_headers;
 mod session;
 mod ui;
 
+pub use admin::ADMIN_META_KEY;
+
 use crate::admin::{self as admin_mod, auth_status, list_audit, login, logout, me, setup};
 use crate::devices::{create_pair_code, create_token, list_tokens, revoke_token};
 use crate::auth::{extract_bearer, TokenInfo, TokenSigner};

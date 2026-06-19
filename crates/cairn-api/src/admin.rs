@@ -107,9 +107,9 @@ pub struct SetupRequest {
     pub password: String,
 }
 
-/// Read the admin record out of the meta store. Returns `None` if absent.
+/// Read the admin record out of the meta store. Returns `None` if absent (or tombstoned).
 pub fn load_admin(state: &AppState) -> cairn_core::Result<Option<AdminRecord>> {
-    let Some(raw) = state.store.get_meta(ADMIN_META_KEY)? else {
+    let Some(raw) = state.store.get_meta_live(ADMIN_META_KEY)? else {
         return Ok(None);
     };
     let rec: AdminRecord = serde_json::from_str(&raw)?;

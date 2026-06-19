@@ -9,6 +9,10 @@ use cairn_core::{Config, DeviceToken, Error, Memory, Result};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+/// Tombstone value written by [`Store::reset_meta`]. HelixDB's append-only schema can't
+/// physically remove rows, so this sentinel signals "logically absent" to readers.
+pub(crate) const META_TOMBSTONE: &str = "__deleted__";
+
 /// The structured-storage operations Cairn needs from a backend, implemented by
 /// [`HelixBackend`](crate::helix::HelixBackend).
 pub(crate) trait StoreBackend: Send + Sync {
@@ -144,15 +148,32 @@ impl Store {
     pub fn get_meta(&self, key: &str) -> Result<Option<String>> {
         self.backend.get_meta(key)
     }
-    /// Atomically set `key=value` only if `key` is currently absent. Returns `Ok(true)` on insert,
-    /// `Ok(false)` if the key already exists. Used for first-run admin creation so two concurrent
+    /// Atomically set `key=value` only if `key` is currently absent (or present only as the
+    /// tombstone sentinel `__deleted__`, written by [`reset_meta`]). Returns `Ok(true)` on
+    /// insert, `Ok(false)` otherwise. Used for first-run admin creation so two concurrent
     /// setup requests can't both win.
     pub fn set_meta_if_absent(&self, key: &str, value: &str) -> Result<bool> {
-        if self.backend.get_meta(key)?.is_some() {
-            return Ok(false);
+        if let Some(existing) = self.backend.get_meta(key)? {
+            if existing != META_TOMBSTONE {
+                return Ok(false);
+            }
         }
         self.backend.set_meta(key, value)?;
         Ok(true)
+    }
+
+    /// Mark `key` as deleted by appending the tombstone sentinel. The append-only HelixDB
+    /// schema can't physically remove rows, so future reads will see this as absent via
+    /// [`get_meta`] and [`set_meta_if_absent`]. Returns `Ok(true)` if a record existed.
+    pub fn reset_meta(&self, key: &str) -> Result<bool> {
+        let existed = self.backend.get_meta(key)?.is_some();
+        self.backend.set_meta(key, META_TOMBSTONE)?;
+        Ok(existed)
+    }
+
+    /// Read meta, treating the tombstone sentinel as absent.
+    pub fn get_meta_live(&self, key: &str) -> Result<Option<String>> {
+        Ok(self.backend.get_meta(key)?.filter(|v| v != META_TOMBSTONE))
     }
     pub fn all_file_versions(&self) -> Result<Vec<(String, String, i64)>> {
         self.backend.all_file_versions()
@@ -372,5 +393,39 @@ mod tests {
             .claim_pairing("EXPIRED1", "2026-01-01T00:00:00.000Z")
             .unwrap()
             .is_none());
+    }
+
+    #[test]
+    fn set_meta_if_absent_blocks_concurrent_setup() {
+        let Some(s) = store() else { return };
+        let k = "first_admin_slot";
+        assert!(s.set_meta_if_absent(k, "first").unwrap());
+        assert!(!s.set_meta_if_absent(k, "second").unwrap());
+        // The first writer's value persists.
+        assert_eq!(s.get_meta_live(k).unwrap().as_deref(), Some("first"));
+    }
+
+    #[test]
+    fn reset_meta_tombstones_and_unblocks_setup() {
+        let Some(s) = store() else { return };
+        let k = "deletable";
+        s.set_meta(k, "original").unwrap();
+        assert_eq!(s.get_meta_live(k).unwrap().as_deref(), Some("original"));
+
+        assert!(s.reset_meta(k).unwrap());
+        // get_meta_live sees the tombstone as absent.
+        assert!(s.get_meta_live(k).unwrap().is_none());
+        // Raw get_meta still sees the tombstone string (so the audit chain is intact).
+        assert_eq!(s.get_meta(k).unwrap().as_deref(), Some(META_TOMBSTONE));
+
+        // A subsequent set_meta_if_absent succeeds because the tombstone counts as absent.
+        assert!(s.set_meta_if_absent(k, "fresh").unwrap());
+        assert_eq!(s.get_meta_live(k).unwrap().as_deref(), Some("fresh"));
+    }
+
+    #[test]
+    fn reset_meta_on_missing_key_reports_no_prior_record() {
+        let Some(s) = store() else { return };
+        assert!(!s.reset_meta("never_set").unwrap());
     }
 }
