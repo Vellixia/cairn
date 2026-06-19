@@ -152,6 +152,30 @@ See [Architecture — Connecting an agent](docs/ARCHITECTURE.md#connecting-an-ag
 🚧 Active development — the engine is functional today. See [Roadmap](docs/ROADMAP.md) for
 what's done and what's next.
 
+## Upgrading from a pre-P0–P3 build
+
+The hardening release includes several breaking changes. If you're upgrading from a build that predates the JWT / TLS / SHA-pin work, do this in order:
+
+1. **Generate a `CAIRN_SECRET_KEY`** (≥ 32 bytes):
+   ```sh
+   openssl rand -base64 48
+   ```
+   Add it to `.env` (or `~/.config/cairn/.env`). The server refuses to start without it.
+
+2. **Re-mint device tokens.** Old plaintext tokens are invalid under the new auth path. For each existing device:
+   ```sh
+   cairn-cli token create --name <device> --scope <admin|write|read>
+   ```
+   The bearer value is shown once; the server stores only metadata. Update each agent to use the new token.
+
+3. **Update CLI invocations.** `cairn install` was renamed to `cairn-cli setup`. If you have scripts calling `cairn install`, switch to `cairn-cli setup`.
+
+4. **TLS for network binds.** If you bind `cairn serve` to a non-loopback address, set `CAIRN_TLS_CERT` + `CAIRN_TLS_KEY`. `CAIRN_INSECURE=1` is allowed only for trusted local networks.
+
+5. **Docker compose.** The bundled stack now binds to `127.0.0.1:7777` by default. Override with `-p "0.0.0.0:${CAIRN_PORT:-7777}:7777"` for LAN exposure.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full list of breaking changes and security hardening.
+
 ## Documentation
 
 | Doc | Description |

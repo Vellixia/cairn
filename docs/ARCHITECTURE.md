@@ -364,7 +364,7 @@ flowchart TD
 | Workspace root | `CAIRN_WORKSPACE_ROOT` — `ContextEngine::resolve_path` rejects paths outside the root |
 | Auth | JWT device tokens (HS256, signed with `CAIRN_SECRET_KEY`). Required once any token exists. |
 | TLS gate | Refuses to serve HTTP on non-loopback unless `CAIRN_INSECURE=1` or TLS cert+key set |
-| CORS | `CAIRN_CORS_ORIGINS` allow-list (default: same-origin only) |
+| CORS | `CAIRN_CORS_ORIGINS` allow-list (default: same-origin only). Wildcard `*` is rejected. |
 | Rate limiting | 60 req/min per IP for API; 5 req/min for pairing claim |
 | Sanitization | `cairn-share` redacts secrets/PII before any share/export/contribute |
 
