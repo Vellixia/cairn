@@ -196,7 +196,10 @@ mod tests {
     fn short_secret_is_rejected() {
         let short = b"too-short".to_vec();
         assert!(
-            matches!(TokenSigner::new(short), Err(AuthError::WeakSecret { len: 9 })),
+            matches!(
+                TokenSigner::new(short),
+                Err(AuthError::WeakSecret { len: 9 })
+            ),
             "expected WeakSecret error for 9-byte secret"
         );
         let boundary = vec![b'a'; MIN_SECRET_LEN - 1];
