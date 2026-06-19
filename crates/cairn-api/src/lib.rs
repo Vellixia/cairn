@@ -7,6 +7,7 @@
 mod admin;
 mod auth;
 mod rate_limit;
+mod security_headers;
 mod session;
 mod ui;
 
@@ -201,6 +202,7 @@ pub fn router(state: AppState) -> Router {
             rate_limit::rate_limit_middleware,
         ))
         .layer(middleware::from_fn_with_state(state.clone(), auth))
+        .layer(middleware::from_fn(security_headers::security_headers))
         .layer(cors)
         .with_state(state)
 }
