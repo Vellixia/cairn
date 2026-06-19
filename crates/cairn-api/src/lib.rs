@@ -4,6 +4,7 @@
 //! and guard (verify, anchor, checkpoint/rollback) engines over REST, and serves the embedded
 //! Next.js control plane — with a built-in fallback page when the UI hasn't been built.
 
+mod admin;
 mod auth;
 mod rate_limit;
 mod session;
@@ -11,6 +12,7 @@ mod ui;
 
 use crate::auth::{extract_bearer, TokenInfo, TokenSigner};
 use crate::rate_limit::RateLimiter;
+use crate::session::SessionSigner;
 use axum::{
     extract::{Query, Request, State},
     http::StatusCode,
@@ -56,6 +58,10 @@ pub struct AppState {
     pub cors_origins: Vec<String>,
     pub rate_limiter: RateLimiter,
     pub pair_rate_limiter: RateLimiter,
+    pub login_rate_limiter: RateLimiter,
+    pub setup_rate_limiter: RateLimiter,
+    pub session_signer: Option<Arc<SessionSigner>>,
+    pub audit_log: Arc<admin::AuditLog>,
     signer: Option<Arc<TokenSigner>>,
 }
 
@@ -77,6 +83,7 @@ impl AppState {
                 TokenSigner::new(k.clone()).expect("CAIRN_SECRET_KEY must be non-empty for auth"),
             )
         });
+        let session_signer = cfg.secret_key.as_ref().map(|k| Arc::new(SessionSigner::new(k.clone())));
         Ok(Self {
             store,
             ctx,
@@ -92,6 +99,10 @@ impl AppState {
             cors_origins: cfg.cors_origins.clone(),
             rate_limiter: RateLimiter::new(60, std::time::Duration::from_secs(60)),
             pair_rate_limiter: RateLimiter::new(5, std::time::Duration::from_secs(60)),
+            login_rate_limiter: RateLimiter::new(5, std::time::Duration::from_secs(60)),
+            setup_rate_limiter: RateLimiter::new(3, std::time::Duration::from_secs(60)),
+            session_signer,
+            audit_log: Arc::new(admin::AuditLog::default()),
             signer,
         })
     }

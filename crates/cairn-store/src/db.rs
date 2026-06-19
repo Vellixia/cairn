@@ -138,11 +138,21 @@ impl Store {
     pub fn latest_file_version(&self, path: &str) -> Result<Option<(String, i64)>> {
         self.backend.latest_file_version(path)
     }
-    pub fn set_meta(&self, key: &str, value: &str) -> Result<()> {
+    pub     fn set_meta(&self, key: &str, value: &str) -> Result<()> {
         self.backend.set_meta(key, value)
     }
     pub fn get_meta(&self, key: &str) -> Result<Option<String>> {
         self.backend.get_meta(key)
+    }
+    /// Atomically set `key=value` only if `key` is currently absent. Returns `Ok(true)` on insert,
+    /// `Ok(false)` if the key already exists. Used for first-run admin creation so two concurrent
+    /// setup requests can't both win.
+    pub fn set_meta_if_absent(&self, key: &str, value: &str) -> Result<bool> {
+        if self.backend.get_meta(key)?.is_some() {
+            return Ok(false);
+        }
+        self.backend.set_meta(key, value)?;
+        Ok(true)
     }
     pub fn all_file_versions(&self) -> Result<Vec<(String, String, i64)>> {
         self.backend.all_file_versions()
