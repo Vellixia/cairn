@@ -12,10 +12,19 @@ ignore = [
 informational_warnings = ["unmaintained"]
 severity_threshold = "low"
 
+[database]
+fetch = true
+stale = false
+
 [output]
-deny = ["warnings"]
+deny = ["unmaintained"]
 format = "terminal"
+quiet = false
 show_tree = true
+
+[target]
+arch = ["x86_64"]
+os = ["linux", "windows"]
 
 [yanked]
 enabled = true
