@@ -1,18 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { getJSON, type AuthStatus, type Me } from "@/lib/api";
+
+const MeContext = createContext<Me | null>(null);
+export const useMe = () => useContext(MeContext);
 
 /**
  * SessionGate: on mount, probes `/api/auth/status` + `/api/auth/me` (public + cookie-based).
  *
  * - If status reports `setup_required`, redirect to /setup.
  * - Else, if `me` returns 401 (no cookie or invalid cookie), redirect to /login?from=… .
- * - Else, render children.
+ * - Else, render children and expose the authenticated `Me` record via `useMe()`.
  *
  * The first paint uses a CSS-only skeleton so we don't flash the dashboard before the probe
  * completes (and we don't accidentally leak auth state via a brief login redirect).
+ *
+ * The probe runs only on mount; client-side navigations within the dashboard layout do not
+ * re-trigger it, avoiding a burst of `/api/auth/me` requests when the user clicks around.
  */
 
 type Phase =
@@ -46,9 +52,11 @@ export function SessionGate({ children }: { children: React.ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [router, pathname]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (phase.kind === "ready") return <>{children}</>;
+  if (phase.kind === "ready") {
+    return <MeContext.Provider value={phase.me}>{children}</MeContext.Provider>;
+  }
   return <SessionGateSkeleton />;
 }
 

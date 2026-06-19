@@ -8,6 +8,9 @@
 /web/out/_next/static/**/*.js.map
 /web/dist
 
+# Local dogfood testing artifacts
+/dogfood-output
+
 # Cairn runtime data
 /data
 /.cairn

@@ -7,7 +7,6 @@
 mod admin;
 mod auth;
 mod devices;
-mod rate_limit;
 mod security_headers;
 mod session;
 mod ui;
@@ -17,7 +16,6 @@ pub use admin::ADMIN_META_KEY;
 use crate::admin::{self as admin_mod, auth_status, list_audit, login, logout, me, setup};
 use crate::auth::{extract_bearer, TokenInfo, TokenSigner};
 use crate::devices::{create_pair_code, create_token, list_tokens, revoke_token};
-use crate::rate_limit::RateLimiter;
 use crate::session::{extract_cookie as extract_session_cookie, SessionSigner};
 use axum::{
     extract::{Query, Request, State},
@@ -62,10 +60,6 @@ pub struct AppState {
     pub tls: Option<TlsConfig>,
     pub insecure: bool,
     pub cors_origins: Vec<String>,
-    pub rate_limiter: RateLimiter,
-    pub pair_rate_limiter: RateLimiter,
-    pub login_rate_limiter: RateLimiter,
-    pub setup_rate_limiter: RateLimiter,
     pub session_signer: Option<Arc<SessionSigner>>,
     pub audit_log: Arc<admin::AuditLog>,
     signer: Option<Arc<TokenSigner>>,
@@ -106,10 +100,6 @@ impl AppState {
             tls: cfg.tls.clone(),
             insecure: cfg.insecure,
             cors_origins: cfg.cors_origins.clone(),
-            rate_limiter: RateLimiter::new(60, std::time::Duration::from_secs(60)),
-            pair_rate_limiter: RateLimiter::new(5, std::time::Duration::from_secs(60)),
-            login_rate_limiter: RateLimiter::new(5, std::time::Duration::from_secs(60)),
-            setup_rate_limiter: RateLimiter::new(3, std::time::Duration::from_secs(60)),
             session_signer,
             audit_log: Arc::new(admin::AuditLog::default()),
             signer,
@@ -147,9 +137,6 @@ impl AppState {
 
 pub fn router(state: AppState) -> Router {
     let cors = build_cors(&state.cors_origins);
-    let pair_limiter = state.pair_rate_limiter.clone();
-    let login_limiter = state.login_rate_limiter.clone();
-    let setup_limiter = state.setup_rate_limiter.clone();
     Router::new()
         .route("/api/health", get(health))
         .route("/api/stats", get(stats))
@@ -175,42 +162,20 @@ pub fn router(state: AppState) -> Router {
         .route("/api/tools/list", get(tools_list))
         .route("/api/tools/call", post(tools_call))
         .route("/api/pair/new", post(pair_new))
-        .route(
-            "/api/pair/claim",
-            post(pair_claim).layer(axum::middleware::from_fn_with_state(
-                pair_limiter,
-                rate_limit::rate_limit_middleware,
-            )),
-        )
+        .route("/api/pair/claim", post(pair_claim))
         .route("/api/sync/pull", get(sync_pull))
         .route("/api/sync/push", post(sync_push))
         .route("/api/auth/status", get(auth_status))
-        .route(
-            "/api/auth/login",
-            post(login).layer(axum::middleware::from_fn_with_state(
-                login_limiter,
-                rate_limit::rate_limit_middleware,
-            )),
-        )
+        .route("/api/auth/login", post(login))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/me", get(me))
-        .route(
-            "/api/auth/setup",
-            post(setup).layer(axum::middleware::from_fn_with_state(
-                setup_limiter,
-                rate_limit::rate_limit_middleware,
-            )),
-        )
+        .route("/api/auth/setup", post(setup))
         .route("/api/devices/audit", get(list_audit))
         .route("/api/devices/tokens", get(list_tokens).post(create_token))
         .route("/api/devices/tokens/:id/revoke", post(revoke_token))
         .route("/api/devices/pair-codes", post(create_pair_code))
         .fallback(static_handler)
         .layer(RequestBodyLimitLayer::new(1024 * 1024))
-        .layer(middleware::from_fn_with_state(
-            state.rate_limiter.clone(),
-            rate_limit::rate_limit_middleware,
-        ))
         .layer(middleware::from_fn_with_state(state.clone(), auth))
         .layer(middleware::from_fn(security_headers::security_headers))
         .layer(cors)

@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { SessionGate } from "@/components/SessionGate";
+import { SessionGate, useMe } from "@/components/SessionGate";
 import { ToastTray } from "@/components/Toast";
 import { Shortcuts } from "@/components/Shortcuts";
-import { getJSON, type Me } from "@/lib/api";
+import type { Me } from "@/lib/api";
 
 /**
  * Dashboard shell. Wraps everything in <SessionGate>, which probes auth + redirects unauth'd
@@ -25,10 +25,7 @@ export default function DashboardLayout({
 }
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
-  const [me, setMe] = useState<Me | null>(null);
-  useEffect(() => {
-    getJSON<Me>("/api/auth/me").then(setMe).catch(() => setMe(null));
-  }, []);
+  const me = useMe();
   return (
     <div className="min-h-screen flex">
       <Sidebar />

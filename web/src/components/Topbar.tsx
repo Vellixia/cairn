@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getJSON, type Health, type Me } from "@/lib/api";
+import { pushToast } from "@/lib/hooks";
 
 interface Props {
   me: Me;
@@ -33,12 +34,17 @@ export function Topbar({ me }: Props) {
 
   async function logout() {
     try {
-      await fetch("/api/auth/logout", {
+      const res = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
+      if (!res.ok) {
+        pushToast("Sign-out failed; please try again.", "error");
+        return;
+      }
     } catch {
-      // ignore — cookie clear is best-effort
+      pushToast("Sign-out failed; please try again.", "error");
+      return;
     }
     router.replace("/login");
   }

@@ -10,7 +10,11 @@ export default function SettingsPage() {
 
   async function logout() {
     try {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      const res = await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        pushToast("Sign-out failed; please try again.", "error");
+        return;
+      }
       pushToast("Signed out", "info");
       router.replace("/login");
     } catch (e) {
