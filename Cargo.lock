@@ -517,6 +517,8 @@ dependencies = [
  "cairn-core",
  "fastembed",
  "serde_json",
+ "sha2",
+ "tracing",
  "ureq 2.12.1",
 ]
 
