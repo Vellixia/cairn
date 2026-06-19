@@ -54,10 +54,14 @@ jobs:
           targets: ${{ matrix.target }}
       # Builds --release, archives the `cairn` binary as cairn-<target>.tar.gz (or .zip on
       # Windows) — matching the install-script names — and uploads to the release created above.
-      - name: Build and upload release binary
+      - name: Build and upload release binaries
         uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1
         with:
-          bin: cairn
+          # Pack both binaries into one archive per target. The action supports a
+          # comma-separated `bin` list and the install scripts extract both files
+          # from the same tarball. Archive name remains `cairn-$target` so existing
+          # SHA256SUMS filenames and install paths are unchanged.
+          bin: cairn,cairn-cli
           target: ${{ matrix.target }}
           archive: cairn-$target
           token: ${{ secrets.GITHUB_TOKEN }}
