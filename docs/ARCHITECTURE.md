@@ -399,7 +399,8 @@ Key variables: `CAIRN_DATA_DIR`, `CAIRN_HOST`, `CAIRN_PORT`, `CAIRN_HELIX_URL`, 
 | `CAIRN_INSECURE` | set `1` to allow plain HTTP on non-loopback (local dev only) |
 | `CAIRN_WORKSPACE_ROOT` | restrict file reads/writes to this directory (path traversal guard) |
 | `CAIRN_CORS_ORIGINS` | comma-separated allowed CORS origins (default: same-origin only) |
-| `CAIRN_EMBED_PROVIDER` · `_MODEL` · `_URL` · `_API_KEY` | embedding model (default: local `all-MiniLM-L6-v2`) |
+| `CAIRN_EMBED_PROVIDER` · `_MODEL` · `_URL` · `_API_KEY` | embedding model. Default Docker image uses `hashing` (zero-dep, lexical). To use the in-process `all-MiniLM-L6-v2` model, build with `--build-arg CAIRN_FEATURES=embed-local` and set `CAIRN_EMBED_PROVIDER=local` |
+| `CAIRN_EMBED_FASTEMBED_SHA256` | optional. Pin the SHA-256 of the local `model.onnx`. If set, `cairn-embed` refuses to load a model whose hash doesn't match. If unset, the actual hash is logged at WARN on first load so operators can pin it. |
 | `GITHUB_TOKEN` · `CAIRN_GITHUB_TOKEN` | optional. Lifts the GitHub API rate limit for `cairn update` |
 | `HELIX_PORT` · `MINIO_ROOT_USER` · `MINIO_ROOT_PASSWORD` | (compose only) host Helix port and MinIO credentials |
 | `CAIRN_REPO` · `CAIRN_INSTALL_DIR` | (install script only) override the GitHub repo and install location |
@@ -553,5 +554,4 @@ to bundle the MCP server, all four lifecycle hooks, slash commands (`/cairn:reca
 
 - [Plan](PLAN.md) — product vision and problem analysis
 - [Roadmap](ROADMAP.md) — what's done, what's next
-- [Decisions](DECISIONS.md) — key architecture decisions
 - [Benchmarks](BENCHMARKS.md) — measured token savings
