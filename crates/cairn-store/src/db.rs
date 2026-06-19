@@ -226,6 +226,7 @@ impl Store {
                 url: None,
                 api_key: None,
             },
+            admin: cairn_core::AdminConfig::default(),
         };
         std::fs::create_dir_all(cfg.blobs_dir()).expect("create test blob dir");
         Some(cfg)

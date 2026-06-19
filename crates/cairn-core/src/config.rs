@@ -19,6 +19,36 @@
 
 use std::path::{Path, PathBuf};
 
+/// Single-admin account settings (web dashboard auth).
+///
+/// Resolution priority (highest → lowest):
+/// 1. `CAIRN_ADMIN_PASSWORD_HASH` — pre-hashed (Argon2id PHC).
+/// 2. `CAIRN_ADMIN_PASSWORD` — plaintext; refused on non-loopback binds unless
+///    `CAIRN_INSECURE=1` is set, mirroring the existing TLS gate.
+/// 3. Server starts in setup mode — `/setup` wizard accepts the first admin.
+///
+/// Note: the *persisted* admin record (with its generation counter and hash) is stored in the
+/// meta store under key `admin`, not in config. These fields only describe the *bootstrap*
+/// inputs.
+#[derive(Debug, Clone)]
+pub struct AdminConfig {
+    pub username: String,
+    pub password_hash: Option<String>,
+    pub password: Option<String>,
+    pub session_ttl_hours: u64,
+}
+
+impl Default for AdminConfig {
+    fn default() -> Self {
+        Self {
+            username: "admin".to_string(),
+            password_hash: None,
+            password: None,
+            session_ttl_hours: 24,
+        }
+    }
+}
+
 /// Embedding-model settings (used to vectorize memories for Helix's vector search).
 #[derive(Clone)]
 pub struct EmbedConfig {
@@ -91,6 +121,8 @@ pub struct Config {
     pub cors_origins: Vec<String>,
     /// Embedding settings.
     pub embed: EmbedConfig,
+    /// Admin account settings.
+    pub admin: AdminConfig,
 }
 
 impl Config {
@@ -138,6 +170,14 @@ impl Config {
                 model: env_str("CAIRN_EMBED_MODEL"),
                 url: env_str("CAIRN_EMBED_URL"),
                 api_key: env_str("CAIRN_EMBED_API_KEY"),
+            },
+            admin: AdminConfig {
+                username: env_str("CAIRN_ADMIN_USERNAME").unwrap_or_else(|| "admin".to_string()),
+                password_hash: env_str("CAIRN_ADMIN_PASSWORD_HASH"),
+                password: env_str("CAIRN_ADMIN_PASSWORD"),
+                session_ttl_hours: env_str("CAIRN_ADMIN_SESSION_TTL_HOURS")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(24),
             },
             data_dir,
         };
@@ -227,6 +267,7 @@ mod tests {
                 url: None,
                 api_key: None,
             },
+            admin: AdminConfig::default(),
         }
     }
 
@@ -274,5 +315,11 @@ mod tests {
         assert!(debug.contains("[REDACTED]"));
         assert!(!debug.contains("sk-super-secret-key-12345"));
         assert!(debug.contains("openai"));
+    }
+
+    #[test]
+    fn admin_config_default_username() {
+        assert_eq!(AdminConfig::default().username, "admin");
+        assert_eq!(AdminConfig::default().session_ttl_hours, 24);
     }
 }
