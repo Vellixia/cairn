@@ -31,11 +31,20 @@ pub struct TokenInfo {
     pub scope: TokenScope,
 }
 
+/// Minimum HS256 secret length in bytes. RFC 2104 recommends the key length equal the hash
+/// output (32 bytes for SHA-256); shorter keys meaningfully weaken the HMAC.
+pub const MIN_SECRET_LEN: usize = 32;
+
 /// Error type for token operations.
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
     #[error("missing or invalid signing secret")]
     MissingSecret,
+    #[error(
+        "CAIRN_SECRET_KEY is too short ({len} bytes); HS256 requires at least {MIN_SECRET_LEN} \
+         bytes — generate one with `openssl rand -base64 48` and set it in .env"
+    )]
+    WeakSecret { len: usize },
     #[error("token decode failed: {0}")]
     Decode(#[from] jsonwebtoken::errors::Error),
     #[error("unknown token scope: {0}")]
@@ -49,10 +58,14 @@ pub struct TokenSigner {
 }
 
 impl TokenSigner {
-    /// Build a signer from a raw secret. Returns an error if the secret is empty.
+    /// Build a signer from a raw secret. Returns an error if the secret is empty or shorter
+    /// than [`MIN_SECRET_LEN`] bytes.
     pub fn new(secret: Vec<u8>) -> Result<Self, AuthError> {
         if secret.is_empty() {
             return Err(AuthError::MissingSecret);
+        }
+        if secret.len() < MIN_SECRET_LEN {
+            return Err(AuthError::WeakSecret { len: secret.len() });
         }
         Ok(Self { secret })
     }
@@ -138,8 +151,8 @@ mod tests {
 
     #[test]
     fn wrong_secret_fails() {
-        let s1 = TokenSigner::new(b"secret-one-is-long-enough-12345".to_vec()).unwrap();
-        let s2 = TokenSigner::new(b"secret-two-is-long-enough-67890".to_vec()).unwrap();
+        let s1 = TokenSigner::new(b"secret-one-is-long-enough-1234567".to_vec()).unwrap();
+        let s2 = TokenSigner::new(b"secret-two-is-long-enough-7890123".to_vec()).unwrap();
         let jwt = s1.mint("id-123", "laptop", TokenScope::Write, None);
         assert!(s2.verify(&jwt).is_err());
     }
@@ -169,5 +182,36 @@ mod tests {
             let info = s.verify(&jwt).unwrap();
             assert_eq!(info.scope, scope);
         }
+    }
+
+    #[test]
+    fn empty_secret_is_rejected() {
+        assert!(matches!(
+            TokenSigner::new(Vec::new()),
+            Err(AuthError::MissingSecret)
+        ));
+    }
+
+    #[test]
+    fn short_secret_is_rejected() {
+        let short = b"too-short".to_vec();
+        assert!(
+            matches!(TokenSigner::new(short), Err(AuthError::WeakSecret { len: 9 })),
+            "expected WeakSecret error for 9-byte secret"
+        );
+        let boundary = vec![b'a'; MIN_SECRET_LEN - 1];
+        assert!(
+            matches!(
+                TokenSigner::new(boundary),
+                Err(AuthError::WeakSecret { len }) if len == MIN_SECRET_LEN - 1
+            ),
+            "expected WeakSecret error for secret one byte below minimum"
+        );
+    }
+
+    #[test]
+    fn minimum_length_secret_is_accepted() {
+        let ok = vec![b'k'; MIN_SECRET_LEN];
+        assert!(TokenSigner::new(ok).is_ok());
     }
 }
