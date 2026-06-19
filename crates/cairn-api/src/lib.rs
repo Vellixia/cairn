@@ -6,12 +6,14 @@
 
 mod admin;
 mod auth;
+mod devices;
 mod rate_limit;
 mod security_headers;
 mod session;
 mod ui;
 
 use crate::admin::{self as admin_mod, auth_status, list_audit, login, logout, me, setup};
+use crate::devices::{create_pair_code, create_token, list_tokens, revoke_token};
 use crate::auth::{extract_bearer, TokenInfo, TokenSigner};
 use crate::rate_limit::RateLimiter;
 use crate::session::{extract_cookie as extract_session_cookie, SessionSigner};
@@ -195,6 +197,9 @@ pub fn router(state: AppState) -> Router {
             )),
         )
         .route("/api/devices/audit", get(list_audit))
+        .route("/api/devices/tokens", get(list_tokens).post(create_token))
+        .route("/api/devices/tokens/:id/revoke", post(revoke_token))
+        .route("/api/devices/pair-codes", post(create_pair_code))
         .fallback(static_handler)
         .layer(RequestBodyLimitLayer::new(1024 * 1024))
         .layer(middleware::from_fn_with_state(
