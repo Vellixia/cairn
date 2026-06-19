@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { SessionGate } from "@/components/SessionGate";
 import { ToastTray } from "@/components/Toast";
+import { Shortcuts } from "@/components/Shortcuts";
 import { getJSON, type Me } from "@/lib/api";
 
 /**
@@ -38,6 +39,8 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <ToastTray />
+      <Shortcuts />
+      <CommandPaletteBootstrap />
     </div>
   );
 }
@@ -50,4 +53,13 @@ function TopbarBootstrap({ me }: { me: Me }) {
   }, []);
   if (!Topbar) return <div className="h-14 border-b border-line" />;
   return <Topbar me={me} />;
+}
+
+function CommandPaletteBootstrap() {
+  const [Palette, setPalette] = useState<React.ComponentType | null>(null);
+  useEffect(() => {
+    import("@/components/CommandPalette").then((m) => setPalette(() => m.CommandPalette));
+  }, []);
+  if (!Palette) return null;
+  return <Palette />;
 }
