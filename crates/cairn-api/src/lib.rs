@@ -10,9 +10,10 @@ mod rate_limit;
 mod session;
 mod ui;
 
+use crate::admin::{self as admin_mod, auth_status, list_audit, login, logout, me, setup};
 use crate::auth::{extract_bearer, TokenInfo, TokenSigner};
 use crate::rate_limit::RateLimiter;
-use crate::session::SessionSigner;
+use crate::session::{extract_cookie as extract_session_cookie, SessionSigner};
 use axum::{
     extract::{Query, Request, State},
     http::StatusCode,
@@ -139,6 +140,8 @@ impl AppState {
 pub fn router(state: AppState) -> Router {
     let cors = build_cors(&state.cors_origins);
     let pair_limiter = state.pair_rate_limiter.clone();
+    let login_limiter = state.login_rate_limiter.clone();
+    let setup_limiter = state.setup_rate_limiter.clone();
     Router::new()
         .route("/api/health", get(health))
         .route("/api/stats", get(stats))
@@ -173,6 +176,24 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/api/sync/pull", get(sync_pull))
         .route("/api/sync/push", post(sync_push))
+        .route("/api/auth/status", get(auth_status))
+        .route(
+            "/api/auth/login",
+            post(login).layer(axum::middleware::from_fn_with_state(
+                login_limiter,
+                rate_limit::rate_limit_middleware,
+            )),
+        )
+        .route("/api/auth/logout", post(logout))
+        .route("/api/auth/me", get(me))
+        .route(
+            "/api/auth/setup",
+            post(setup).layer(axum::middleware::from_fn_with_state(
+                setup_limiter,
+                rate_limit::rate_limit_middleware,
+            )),
+        )
+        .route("/api/devices/audit", get(list_audit))
         .fallback(static_handler)
         .layer(RequestBodyLimitLayer::new(1024 * 1024))
         .layer(middleware::from_fn_with_state(
@@ -776,65 +797,107 @@ async fn tools_call(
     }
 }
 
-/// Bearer-token auth. The web UI and `/api/health` are always open; other `/api/*` routes require
-/// a valid device token *once any token has been created*. When no tokens exist, only loopback
-/// (local) requests are allowed — remote API access without any device token is never safe.
+/// Authentication middleware.
+///
+/// Composition:
+///   1. Public endpoints (`/api/health`, `/api/pair/claim`, the admin auth surface) — pass
+///      through unchanged.
+///   2. Admin cookie — if `cairn_session` is present, signed, and the embedded generation
+///      matches the live admin record, the request is treated as the admin (all scopes).
+///   3. Device-token bearer — the existing JWT path; respected when no admin cookie is
+///      available so CLI / MCP clients keep working.
+///   4. Loopback fallback — when there are no device tokens AND no admin (first-run before
+///      `/setup`), only loopback calls pass. The admin cookie path overrides this once
+///      `/setup` has been visited.
+///
+/// All errors are 401 with a uniform JSON body.
 async fn auth(State(s): State<AppState>, req: Request, next: Next) -> Response {
     let path = req.uri().path();
-    // `/api/pair/claim` is open: a brand-new device has no token yet — the short-lived,
-    // single-use pairing code is its credential.
-    let needs_auth =
-        path.starts_with("/api/") && path != "/api/health" && path != "/api/pair/claim";
-    if needs_auth {
-        match s.store.count_tokens() {
-            Ok(0) => {
-                // No tokens configured — require the request to be local (loopback).
-                // Remote API access without any device token is never safe.
-                let is_local = req
-                    .extensions()
-                    .get::<axum::extract::ConnectInfo<SocketAddr>>()
-                    .map(|ci| ci.0.ip().is_loopback())
-                    .unwrap_or(false);
-                if !is_local {
-                    return (
-                        StatusCode::UNAUTHORIZED,
-                        Json(json!({ "error": "no device tokens configured; create one with `cairn token create` or access from localhost" })),
-                    )
-                        .into_response();
-                }
-            }
-            Ok(_) => {
-                let ok = req
-                    .headers()
-                    .get(axum::http::header::AUTHORIZATION)
-                    .and_then(|v| v.to_str().ok())
-                    .and_then(extract_bearer)
-                    .and_then(|bearer| s.verify_bearer(bearer))
-                    .map(|info| {
-                        let method = req.method().as_str();
-                        let path = req.uri().path();
-                        info.scope.allows(method, path)
-                            && s.store.validate_token_id(&info.id).unwrap_or(false)
-                    })
-                    .unwrap_or(false);
-                if !ok {
-                    return (
-                        StatusCode::UNAUTHORIZED,
-                        Json(json!({ "error": "invalid or missing device token" })),
-                    )
-                        .into_response();
-                }
-            }
-            Err(_) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "auth check failed" })),
-                )
-                    .into_response()
-            }
+    let method = req.method().as_str();
+
+    // 1. Public endpoints — never require auth.
+    if !path.starts_with("/api/")
+        || matches!(
+            path,
+            "/api/health"
+                | "/api/pair/claim"
+                | "/api/auth/login"
+                | "/api/auth/logout"
+                | "/api/auth/me"
+                | "/api/auth/setup"
+                | "/api/auth/status"
+        )
+    {
+        return next.run(req).await;
+    }
+
+    // 2. Admin cookie.
+    if verify_admin_cookie(&s, &req).is_some() {
+        // Admin can do everything. No scope table check.
+        tracing::trace!(path, "auth=admin");
+        return next.run(req).await;
+    }
+
+    // 3. Device-token bearer.
+    if let Some(bearer_ok) = verify_bearer_auth(&s, &req, method, path) {
+        if bearer_ok {
+            tracing::trace!(path, "auth=bearer");
+            return next.run(req).await;
         }
     }
-    next.run(req).await
+
+    // 4. Loopback fallback — only when there are no device tokens AND no admin.
+    let token_count = s.store.count_tokens().unwrap_or(0);
+    let admin_exists = admin_mod::load_admin(&s).map(|r| r.is_some()).unwrap_or(false);
+    if token_count == 0 && !admin_exists {
+        let is_local = req
+            .extensions()
+            .get::<axum::extract::ConnectInfo<SocketAddr>>()
+            .map(|ci| ci.0.ip().is_loopback())
+            .unwrap_or(false);
+        if is_local {
+            return next.run(req).await;
+        }
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "error": "no admin or device tokens configured; create an admin via /setup on localhost"
+            })),
+        )
+            .into_response();
+    }
+
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({ "error": "invalid or missing credentials" })),
+    )
+        .into_response()
+}
+
+/// Verify the admin cookie, returning `Some(())` on success.
+fn verify_admin_cookie(s: &AppState, req: &Request) -> Option<()> {
+    let signer = s.session_signer.as_ref()?;
+    let header_value = req.headers().get(axum::http::header::COOKIE)?;
+    let header_str = header_value.to_str().ok()?;
+    let cookie = extract_session_cookie(Some(header_str))?;
+    let rec = admin_mod::load_admin(s).ok().flatten()?;
+    signer.verify(cookie, rec.generation).ok()?;
+    Some(())
+}
+
+/// Verify a device-token bearer against the request, returning `Some(true)` on success,
+/// `Some(false)` on a present-but-invalid bearer (so the caller can decide whether to fall
+/// through), `None` when no bearer was presented at all.
+fn verify_bearer_auth(s: &AppState, req: &Request, method: &str, path: &str) -> Option<bool> {
+    let bearer = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(extract_bearer)?;
+    let info = s.verify_bearer(bearer)?;
+    let allowed = info.scope.allows(method, path)
+        && s.store.validate_token_id(&info.id).unwrap_or(false);
+    Some(allowed)
 }
 
 // ---- error plumbing ----------------------------------------------------------------------------
