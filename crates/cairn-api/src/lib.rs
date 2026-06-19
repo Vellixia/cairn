@@ -173,8 +173,12 @@ pub fn router(state: AppState) -> Router {
 }
 
 /// Build a CORS layer from the configured origins. Empty origins means same-origin only (no
-/// cross-origin requests allowed). `["*"]` means permissive (with a tracing warning). Specific
-/// origins are allowlisted explicitly.
+/// cross-origin requests allowed). Specific origins are allowlisted explicitly.
+///
+/// `["*"]` is rejected outright: the Cairn API is fully authenticated, and a wildcard origin
+/// combined with credentialed requests is the dangerous combo that CORS specifically defends
+/// against. Users who actually want full permissive behavior must opt in by listing every
+/// trusted origin explicitly.
 fn build_cors(origins: &[String]) -> CorsLayer {
     if origins.is_empty() {
         // Same-origin only: no cross-origin requests allowed. The browser enforces this by
@@ -190,9 +194,25 @@ fn build_cors(origins: &[String]) -> CorsLayer {
                 axum::http::header::CONTENT_TYPE,
             ]));
     }
-    if origins.len() == 1 && origins[0] == "*" {
-        tracing::warn!("CORS is set to permissive (*) — any origin can make authenticated requests. Set CAIRN_CORS_ORIGINS to specific origins for production.");
-        return CorsLayer::permissive();
+    if origins.iter().any(|o| o == "*") {
+        // Hard fail. Use tracing::error so it shows up in any alerting that's watching for
+        // ERROR-level events. We still return a restrictive layer so a misconfigured server
+        // doesn't accidentally open itself up.
+        tracing::error!(
+            "CAIRN_CORS_ORIGINS contains '*' — wildcard origin rejected. The Cairn API is \
+             authenticated; list explicit origins instead (e.g. CAIRN_CORS_ORIGINS=https://app.example.com). \
+             Falling back to same-origin-only CORS."
+        );
+        return CorsLayer::new()
+            .allow_methods(AllowMethods::list(vec![
+                axum::http::Method::GET,
+                axum::http::Method::POST,
+                axum::http::Method::OPTIONS,
+            ]))
+            .allow_headers(AllowHeaders::list(vec![
+                axum::http::header::AUTHORIZATION,
+                axum::http::header::CONTENT_TYPE,
+            ]));
     }
     let allowed: Vec<axum::http::HeaderValue> =
         origins.iter().filter_map(|o| o.parse().ok()).collect();
@@ -1131,5 +1151,51 @@ mod tests {
         .0;
         let text = recalled["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("mcp"), "recall text was: {text}");
+    }
+
+    #[test]
+    fn build_cors_rejects_wildcard_origin() {
+        // A bare "*" must not produce a permissive layer. We assert that the returned layer's
+        // allow_origin is NOT `AllowOrigin::any()` (the permissive wildcard marker).
+        let layer = build_cors(&["*".to_string()]);
+        // AllowOrigin doesn't expose PartialEq, so we format-and-stringify instead: a permissive
+        // layer renders as `*` in its Debug output; a restricted layer renders the origin list.
+        let dbg = format!("{:?}", layer);
+        assert!(
+            !dbg.contains("Any") && !dbg.contains('*'),
+            "wildcard CORS must not produce a permissive layer; got: {dbg}"
+        );
+    }
+
+    #[test]
+    fn build_cors_rejects_wildcard_in_list() {
+        // Even if "*" is one entry among many, reject and fall back to restrictive. A user
+        // passing ["https://app.example.com", "*"] gets the same protection as ["*"] alone.
+        let layer = build_cors(&["https://app.example.com".to_string(), "*".to_string()]);
+        let dbg = format!("{:?}", layer);
+        assert!(
+            !dbg.contains("Any"),
+            "mixed list containing '*' must not produce a permissive layer; got: {dbg}"
+        );
+    }
+
+    #[test]
+    fn build_cors_accepts_explicit_origin_list() {
+        let layer = build_cors(&["https://app.example.com".to_string()]);
+        let dbg = format!("{:?}", layer);
+        assert!(
+            dbg.contains("https://app.example.com"),
+            "explicit origin should appear in layer debug; got: {dbg}"
+        );
+    }
+
+    #[test]
+    fn build_cors_empty_yields_restrictive() {
+        let layer = build_cors(&[]);
+        let dbg = format!("{:?}", layer);
+        assert!(
+            !dbg.contains("Any"),
+            "empty origin list must not produce a permissive layer; got: {dbg}"
+        );
     }
 }
