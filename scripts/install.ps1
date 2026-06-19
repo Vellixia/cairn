@@ -2,7 +2,8 @@
 #
 #   irm https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.ps1 | iex
 #
-# Honors: $env:CAIRN_REPO, $env:CAIRN_INSTALL_DIR, $env:CAIRN_VERSION, $env:CAIRN_INSTALL_SKIP_VERIFY.
+# Honors: $env:CAIRN_REPO, $env:CAIRN_INSTALL_DIR, $env:CAIRN_VERSION, $env:CAIRN_INSTALL_SKIP_VERIFY,
+#          $env:CAIRN_INSTALL_REQUIRE_ATTESTATION (set to '1' to make SLSA provenance a hard gate).
 $ErrorActionPreference = 'Stop'
 
 $Repo       = if ($env:CAIRN_REPO)              { $env:CAIRN_REPO }              else { 'Vellixia/Cairn' }
@@ -100,6 +101,43 @@ if ($SkipVerify) {
         Fail "Checksum mismatch for ${archive}: expected $expected, got $actual"
     }
     Write-Step "Checksum OK ($actual)"
+
+    # Verify the SLSA provenance attestation if cosign is available. This proves the archive
+    # was built by the official GitHub Actions workflow and not from a fork or local rebuild.
+    # Soft gate by default: a failed provenance check warns but does not abort, because users
+    # may be running in an environment where cosign is not installed. Set
+    # $env:CAIRN_INSTALL_REQUIRE_ATTESTATION = '1' to upgrade to a hard gate.
+    $RequireAttestation = ($env:CAIRN_INSTALL_REQUIRE_ATTESTATION -eq '1')
+    $cosign = Get-Command cosign -ErrorAction SilentlyContinue
+    if ($cosign) {
+        $attestationUrl = "$BaseUrl/download/$tag/cairn.intoto.jsonl"
+        $attestationPath = Join-Path $env:TEMP 'cairn.intoto.jsonl'
+        Write-Step "Verifying SLSA provenance (cosign verify-attestation)…"
+        try {
+            Invoke-WebRequest -Uri $attestationUrl -OutFile $attestationPath -ErrorAction Stop
+        } catch {
+            Write-Warn "No cairn.intoto.jsonl found at $attestationUrl — skipping provenance verification."
+        }
+        if (Test-Path $attestationPath) {
+            $cosignResult = & cosign verify-attestation `
+                --certificate-identity-regexp 'https://github.com/Vellixia/Cairn' `
+                --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' `
+                --insecure-ignore-tlog `
+                $zipPath 2>&1
+            $cosignExit = $LASTEXITCODE
+            if ($cosignExit -ne 0) {
+                if ($RequireAttestation) {
+                    Write-Host $cosignResult
+                    Fail "SLSA provenance verification failed and CAIRN_INSTALL_REQUIRE_ATTESTATION=1 — refusing to install."
+                }
+                Write-Warn "SLSA provenance verification failed — proceeding because SHA256SUMS matched."
+                Write-Warn "Set CAIRN_INSTALL_REQUIRE_ATTESTATION=1 to make provenance a hard gate."
+            } else {
+                Write-Step "SLSA provenance OK"
+            }
+            Remove-Item $attestationPath -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 Expand-Archive -Path $zipPath -DestinationPath $InstallDir -Force

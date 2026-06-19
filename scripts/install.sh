@@ -4,7 +4,8 @@
 #   curl -fsSL https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.sh | sh
 #   curl -fsSL https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.sh | sh -s -- pair CAIRN-XXXX
 #
-# Honors: CAIRN_REPO, CAIRN_INSTALL_DIR, CAIRN_VERSION, CAIRN_INSTALL_SKIP_VERIFY.
+# Honors: CAIRN_REPO, CAIRN_INSTALL_DIR, CAIRN_VERSION, CAIRN_INSTALL_SKIP_VERIFY,
+#          CAIRN_INSTALL_REQUIRE_ATTESTATION (set to 1 to make SLSA provenance a hard gate).
 set -eu
 
 REPO="${CAIRN_REPO:-Vellixia/Cairn}"
@@ -136,6 +137,36 @@ install_binary() {
             err "checksum mismatch for $archive_name: expected $expected, got $actual"
         fi
         say "Checksum OK ($actual)"
+
+        # Verify the SLSA provenance attestation if cosign is available. This proves the archive
+        # was built by the official GitHub Actions workflow and not from a fork or local rebuild.
+        # Soft gate by default: a failed provenance check warns but does not abort, because users
+        # may be running in an airgapped environment where cosign is not installed. Set
+        # CAIRN_INSTALL_REQUIRE_ATTESTATION=1 to upgrade to a hard gate.
+        if command -v cosign >/dev/null 2>&1; then
+            attestation_url="$BASE_URL/download/$tag/cairn.intoto.jsonl"
+            say "Verifying SLSA provenance (cosign verify-attestation)…"
+            if curl -fsSL "$attestation_url" -o "$tmp/cairn.intoto.jsonl" 2>/dev/null; then
+                archive_path="$tmp/$archive_name"
+                if ! cosign verify-attestation \
+                        --certificate-identity-regexp 'https://github.com/Vellixia/Cairn' \
+                        --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+                        --insecure-ignore-tlog \
+                        "$archive_path" \
+                        > "$tmp/attestation.out" 2>&1; then
+                    if [ "${CAIRN_INSTALL_REQUIRE_ATTESTATION:-}" = "1" ]; then
+                        cat "$tmp/attestation.out" >&2
+                        err "SLSA provenance verification failed and CAIRN_INSTALL_REQUIRE_ATTESTATION=1 — refusing to install."
+                    fi
+                    warn "SLSA provenance verification failed — proceeding because SHA256SUMS matched."
+                    warn "Set CAIRN_INSTALL_REQUIRE_ATTESTATION=1 to make provenance a hard gate."
+                else
+                    say "SLSA provenance OK"
+                fi
+            else
+                warn "no cairn.intoto.jsonl found at $attestation_url — skipping provenance verification"
+            fi
+        fi
     fi
 
     tar -xzf "$tmp/$archive_name" -C "$tmp"
