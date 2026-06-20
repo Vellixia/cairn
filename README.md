@@ -113,14 +113,12 @@ All lossless — the full original is retained and one `expand` away. See [Bench
 ## Quick start
 
 ```sh
-# Docker — the full stack (Cairn + HelixDB + MinIO), the easiest path
-cp .env.example .env          # set MinIO credentials (see .env.example)
-docker compose up -d          # builds Cairn, pulls HelixDB + MinIO, wires them together
-# → http://localhost:7777
+# macOS / Linux — the recommended install path
+brew install Vellixia/tap/cairn       # ships both `cairn` (server) and `cairn-cli`
 ```
 
 ```sh
-# Linux / macOS — one-liner
+# Linux / macOS — one-liner (alternative to Homebrew)
 curl -fsSL https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.sh | sh
 
 # Windows (PowerShell)
@@ -130,6 +128,19 @@ irm https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.ps1 | 
 ```sh
 # From source
 cargo install --git https://github.com/Vellixia/Cairn cairn-server cairn-cli
+```
+
+```sh
+# Docker — the full stack (Cairn + HelixDB + MinIO), the easiest path
+cp .env.example .env          # set MinIO credentials (see .env.example)
+docker compose up -d          # builds Cairn, pulls HelixDB + MinIO, wires them together
+# → http://localhost:7777
+```
+
+```sh
+# Hosted: one-click deploys
+fly launch --copy-config      # uses deploy/fly.toml
+# or import deploy/render.yaml / deploy/railway.toml on those platforms
 ```
 
 Cairn stores data in **HelixDB** — `docker compose` starts one for you, or point
@@ -146,6 +157,54 @@ cairn-cli setup opencode --server http://localhost:7777 --token <token>
 
 Supports Claude Code (MCP + lifecycle hooks), OpenCode, Cursor, VS Code, Windsurf.
 See [Architecture — Connecting an agent](docs/ARCHITECTURE.md#connecting-an-agent-by-hand) for manual setup.
+
+## OpenCode quickstart
+
+OpenCode is a first-class citizen — `cairn-cli` is one of its built-in providers.
+The fastest path from `git clone` to a Cairn-aware session:
+
+```sh
+# 1. Install the CLI (one of these)
+brew install Vellixia/tap/cairn         # macOS / Linux + Homebrew
+# or
+curl -fsSL https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.sh | sh
+
+# 2. Start the server stack
+docker compose up -d                     # HelixDB + MinIO + Cairn on :7777
+
+# 3. Wire OpenCode (creates ~/.config/opencode/opencode.json with the MCP entry)
+cairn-cli setup opencode --server http://localhost:7777
+
+# 4. Generate a token (one-time, copy it)
+cairn-cli token create --name laptop --scope write
+
+# 5. Restart OpenCode so the MCP entry picks up. You'll see `cairn` in the tool list.
+```
+
+After that, OpenCode's tool palette includes `cairn_recall`, `cairn_remember`, `cairn_read`,
+`cairn_verify`, `cairn_assemble`, and the v0.5.0 additions (`memory_graph`, `memory_crystallize`,
+`search`, `metrics`, etc.) — see [MCP tools](docs/ARCHITECTURE.md#mcp-tool-surface).
+
+### What Cairn gives OpenCode out of the box
+
+- **Cross-session memory.** Decisions from last week are visible today via `cairn_recall`
+  at session start, ranked by `confidence × applies_to`.
+- **Lean file reads.** `cairn_read` returns the AST outline (~90% smaller than the full
+  file); the original is one `cairn_expand` away. No context lost.
+- **Drift detection.** Each session records checkpoints; `cairn-cli doctor --fix`
+  re-anchors the model on long tasks.
+- **One-line rules.** `cairn-cli prefer always use ripgrep` becomes a memory that
+  re-fires on every session until contradicted.
+
+### Upgrading OpenCode wiring
+
+After a Cairn upgrade, re-run `cairn-cli setup opencode` to refresh the MCP entry
+(the binary path + tool list may have changed). The setup command is idempotent —
+it preserves unrelated entries in `opencode.json`.
+
+See [Connect OpenCode by hand](docs/ARCHITECTURE.md#opencode) for the JSON shape
+that `cairn-cli setup opencode` writes, in case you need to merge it into a managed
+dotfile repo.
 
 ## Status
 

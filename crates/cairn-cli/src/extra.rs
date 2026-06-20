@@ -61,11 +61,19 @@ pub fn graph(cmd: GraphCmd, s: &State) -> Result<()> {
 }
 
 pub enum GraphCmd {
-    Related { path: String },
-    #[allow(dead_code)] // Wired through in Sprint 9 follow-up; CLI dispatch currently prints "coming soon".
-    Impact { path: String },
-    #[allow(dead_code)] // Wired through in Sprint 9 follow-up; CLI dispatch currently prints "coming soon".
-    Callgraph { symbol: String },
+    Related {
+        path: String,
+    },
+    #[allow(dead_code)]
+    // Wired through in Sprint 9 follow-up; CLI dispatch currently prints "coming soon".
+    Impact {
+        path: String,
+    },
+    #[allow(dead_code)]
+    // Wired through in Sprint 9 follow-up; CLI dispatch currently prints "coming soon".
+    Callgraph {
+        symbol: String,
+    },
 }
 
 pub fn memory_timeline(s: &State, limit: usize) -> Result<()> {

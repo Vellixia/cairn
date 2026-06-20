@@ -2,6 +2,87 @@
 
 All notable changes to Cairn are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-06-20 — Context + Reliability Layer (Phase 3.5 + 4.0)
+
+### What's new
+
+**Memory & confidence (Sprint 2–3)**
+- `confidence: f32` + `pinned: bool` on every memory; reinforced by the
+  agentmemory curve `c' = min(1.0, c + 0.1*(1-c))` on every access.
+- Provenance edges on `Memory`: `derived_from`, `contradicts`, `supersedes`,
+  `applies_to`. New `/dashboard/memory/graph` page with a pure-SVG force layout.
+- `MemoryEngine::crystallize()` promotes a working-tier cluster to a semantic-tier
+  crystal (agentmemory's "lesson" pattern).
+
+**Reliability (Sprint 4–5)**
+- New `cairn-session` crate owns session + drift JSONL storage and
+  approve/reject workflow. `/dashboard/sessions` + `/dashboard/reliability/drift`
+  pages.
+- HMAC-SHA256-signed ledger at `<data_dir>/ledger.jsonl` for every context
+  assembly. `/api/ledger` + `/api/ledger/verify` expose the chain.
+- `/dashboard/savings` page renders the per-assemble savings breakdown.
+
+**Audit + observability (Sprint 1)**
+- Audit events are now durable HelixDB records (was in-memory ring); the
+  `/api/events` SSE stream uses `Last-Event-ID` replay from durable storage
+  instead of 5 s polling. `/api/metrics` exposes the live counters.
+
+**Hybrid search (Sprint 7)**
+- `MemoryEngine::hybrid_search()` combines lexical (BM25-lite) + semantic
+  via Reciprocal Rank Fusion; MMR diversity rerank (`λ=0.7`) keeps the top-N
+  non-redundant. Exposed as `/api/search` and `cairn-cli search`.
+
+**CLI surface (Sprint 9–10)**
+- 25 new MCP tools (`memory_edit`, `memory_delete`, `memory_pin`,
+  `memory_reinforce`, `memory_timeline`, `memory_crystallize`, `memory_graph`,
+  `graph`, `search`, `metrics`, `stats`, etc.). Total tool count is now 40+.
+- New CLI subcommands: `cairn-cli graph related|impact|callgraph`,
+  `memory timeline|crystallize`, `search`, `sessions`, `session`, `metrics`.
+
+**Zero-prompt setup (Sprint 8)**
+- `cairn-cli onboard` runs `doctor --fix` + provisions the local store + wires
+  every detected agent in one shot. `cairn-cli doctor --fix` repairs missing
+  data dirs, weak MinIO creds, etc. Non-zero exit when remediation is required.
+
+**Context packages (Sprint 11)**
+- `.cairnpkg` format: tarball with `manifest.json` + `memory.jsonl` +
+  `profile.jsonl` + `patterns.jsonl` + `graph.jsonl` + `signature.sha256`.
+  Per-file SHA-256 + HMAC signature; rejects oversized (>16 MiB) and tampered
+  packs. `.ctxpkg` is accepted as an import alias.
+- New `cairn-pack` crate + `cairn-cli pack` with 9 actions:
+  `create | info | install | list | remove | export | import | auto-load |
+  publish`.
+
+**Distribution polish (Sprint 12)**
+- **Homebrew tap** at `Vellixia/homebrew-tap` (`brew install Vellixia/tap/cairn`).
+- **One-click deploys** for Fly.io (`deploy/fly.toml`), Railway
+  (`deploy/railway.toml`), and Render (`deploy/render.yaml`).
+- **Non-root Docker volume init.** New `cairn-init` service chowns `/data` to
+  uid 10001 before `cairn` starts as non-root. The pre-0.5.0 `user: "0"`
+  workaround is gone.
+- **README OpenCode quickstart** section.
+
+### Security
+
+- Web dashboard ships a **per-request CSP nonce** (random 16 bytes per
+  response, injected into `<script>` tags). Closes the static-`script-src`
+  gap that would otherwise block the v0.5.0 interactive pages.
+- **Setup wizard v2** (`/setup/wizard`) replaces the original `/setup` flow
+  with a 4-step admin → embed → pair → health walkthrough. v1 `/setup` is
+  retained as a fallback with a deprecation banner.
+- **HMAC-SHA256 ledger** detects tamper attempts on the savings record.
+
+### Test count
+
+`cargo test --workspace` reports **225 passed, 5 ignored, 0 failed**
+as of this release (up from 118 in 0.3.0). The 5 ignored tests require a
+live HelixDB.
+
+See [ADR-010 through ADR-016](docs/DECISIONS.md) for the full reasoning behind
+each decision.
+
+---
+
 ## [0.3.0] — 2026-06-19 — P0–P3 Security & Build Hardening
 
 ### Breaking changes

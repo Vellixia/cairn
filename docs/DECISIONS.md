@@ -221,6 +221,238 @@ API calls unless the user opts in (embedding provider).
 
 ---
 
+## ADR-010: Durable audit log in HelixDB (not in-memory ring)
+
+**Date:** 2026-06-20 (v0.5.0 Sprint 1)  
+**Status:** Accepted
+
+### Context
+The pre-0.5.0 audit log was an in-memory ring buffer. Events vanished on restart, SSE replay
+(`Last-Event-ID`) was unreliable, and the dashboard had to poll `/api/events` every 5 s.
+
+### Decision
+Persist audit events to **HelixDB** via an `AuditBackend` trait. The default impl is a
+no-op (so offline tests don't need a backend); `HelixBackend` appends events as durable nodes
+with monotonic integer ids. SSE replays from `max_event_id` and `recent_audit(since_id)`.
+
+### Rationale
+- Survives restarts — `audit_survives_round_trip_after_a_store_drop_and_reopen` test verifies.
+- `Last-Event-ID` becomes reliable for UI reconnect without server-side state.
+- NoSQL append-only schema is exactly what HelixDB is good at; no migration pain.
+- Trait keeps the abstraction clean — a future Postgres backend can re-implement without
+  touching the audit producer.
+
+### Trade-offs
+- One extra HelixDB write per audit event (~1-2 ms). Acceptable; audit is not on the hot path.
+- Append-only schema means we can't physically delete rows; `get_meta_live` filters tombstone
+  sentinels (`__deleted__`) instead.
+
+---
+
+## ADR-011: Memory `confidence` + `pinned` + provenance edges
+
+**Date:** 2026-06-20 (v0.5.0 Sprint 2–3)  
+**Status:** Accepted
+
+### Context
+Agentmemory's "reinforcement" curve (each access slightly raises confidence, asymptotic to 1.0)
+is the right signal for "which memories should re-surface today?" — but pre-0.5.0 Cairn had no
+confidence field, so recall used only lexical similarity. The memory graph (provenance: derived
+from / contradicts / supersedes / applies_to) was also missing, so there was no way to express
+"this crystallizes these three earlier notes."
+
+### Decision
+Add three things to `Memory`:
+- `confidence: f32` (default 0.5) — bumped by the agentmemory formula
+  `c' = min(1.0, c + 0.1*(1-c))` on every `reinforce()`.
+- `pinned: bool` — never demoted by crystallize / decay passes; user-controlled.
+- `derived_from`, `contradicts`, `supersedes`, `applies_to` — four `Vec<String>` columns of
+  memory ids (or paths for `applies_to`).
+
+Edges are stored as JSON-encoded columns on the `Memory` node, not as separate HelixDB graph
+edges. The `MemoryEngine::graph()` method materializes a node+edge view from flat rows.
+
+### Rationale
+- Confidence gives recall a second axis to rank on (alongside lexical + applies_to).
+- Pinned lets users mark "always show this" without writing a custom rule.
+- Provenance edges enable `crystallize()` to derive a semantic-tier memory from working-tier
+  inputs — the agentmemory "lesson" pattern.
+- Storing edges as columns avoids HelixDB edge migrations when the edge schema evolves.
+
+### Trade-offs
+- `Memory` struct grew by 5 fields; tests that construct `Memory` literals need updating (caught
+  by clippy in `extra.rs::graph_related_finds_memories_pointing_at_a_path`).
+- `crystallize()` runs a single linear scan + one insert; fine up to ~10k memories, would need
+  indexing past that.
+
+---
+
+## ADR-012: Sessions are on-disk JSONL, not HelixDB
+
+**Date:** 2026-06-20 (v0.5.0 Sprint 4)  
+**Status:** Accepted
+
+### Context
+"Sessions" track the per-task workflow: task list, drift events, approve/reject decisions. This
+is operational metadata, not a queryable graph — there's no cross-session join, no vector
+recall, no graph traversal needed.
+
+### Decision
+Store sessions as **JSON files under `<data_dir>/sessions/<id>.json`** and drift events as
+**JSONL append-log under `<data_dir>/sessions/<id>.drift.jsonl`**. The new `cairn-session`
+crate owns the read/write helpers and the patch schema.
+
+### Rationale
+- Append-only drift log mirrors the audit-log pattern (durability + replay), no migration.
+- Single-file sessions are easy to back up, grep, and ship to support.
+- Skipping HelixDB for operational metadata keeps the graph store focused on memories.
+
+### Trade-offs
+- No cross-session queries from the web UI yet (would need a separate index — Sprint 17 plans).
+- Concurrent writers need an OS-level lock; we use `fs2` crate's `FileExt::lock_exclusive`.
+
+---
+
+## ADR-013: HMAC-SHA256 ledger for `context/assemble` runs
+
+**Date:** 2026-06-20 (v0.5.0 Sprint 5)  
+**Status:** Accepted
+
+### Context
+The savings dashboard needs a verifiable record of every context assembly: what was queried,
+what was dropped, what was returned, how many tokens saved. Without signing, a malicious
+extension could forge entries to inflate the savings number (or hide wasted context).
+
+### Decision
+Append-only ledger at `<data_dir>/ledger.jsonl` where each entry is:
+```
+{
+  "ts": <unix_seconds>,
+  "actor": "user|agent_name",
+  "query_hash": "sha256:...",
+  "budget": <int>,
+  "drops": [<reason>...],
+  "savings": { "tokens_in": N, "tokens_out": M, "saved_ratio": 0.0..1.0 },
+  "mac": "hex(hmac_sha256(secret, canonical_json(entry_minus_mac)))"
+}
+```
+Verification: recompute the canonical JSON, recompute the HMAC, compare. `cairn-cli assemble`
+also exposes `/api/ledger/verify` for the dashboard's "verify chain" button.
+
+### Rationale
+- HMAC-SHA256 is symmetric: fast, deterministic, no key infrastructure. The same
+  `CAIRN_SECRET_KEY` already gates JWT device tokens.
+- Canonical JSON (BTreeMap key-sorted, hand-rolled escape) avoids canonicalisation drift.
+- Append-only JSONL is grep-friendly and easy to ship to S3 for long-term audit.
+
+### Trade-offs
+- A leaked `CAIRN_SECRET_KEY` can forge ledger entries (but can also forge everything else —
+  the threat model already assumes the secret is the root of trust).
+- No entry deletion; revocation = an explicit "voided" marker (Sprint 13 follow-up).
+
+---
+
+## ADR-014: `.cairnpkg` format adopted from lean-ctx `.ctxpkg`
+
+**Date:** 2026-06-20 (v0.5.0 Sprint 11)  
+**Status:** Accepted
+
+### Context
+Cairn needs a portable bundle format to ship context (memories, profile, patterns, edges)
+between machines — and ideally to interoperate with the wider lean-ctx ecosystem.
+
+### Decision
+Adopt the lean-ctx `.ctxpkg` design with three changes:
+1. Canonical extension is `.cairnpkg` (not `.ctxpkg`); `.ctxpkg` is accepted as an import
+   alias for interop per plan §10.
+2. Layout is fixed: `manifest.json` + `memory.jsonl` + `profile.jsonl` + `patterns.jsonl` +
+   `graph.jsonl` + `signature.sha256`. No pax extensions, no symlinks.
+3. SHA-256 per-file in the manifest; `signature.sha256` is HMAC-SHA256 over the canonical
+   manifest bytes.
+
+Hand-rolled ustar writer/parser (no `tar` crate dependency) keeps the binary lean and the
+parsing code small (~200 lines).
+
+### Rationale
+- A fixed, minimal layout means every Cairn release can read every older `.cairnpkg`.
+- lean-ctx interop lets the same bundle round-trip in either tool; useful for cross-team sharing.
+- Per-file SHA-256 catches bit-rot and partial downloads; the HMAC signature catches wholesale
+  substitution attacks.
+
+### Trade-offs
+- No compression in the tarball itself (matches `.ctxpkg`); the `MAX_UNCOMPRESSED_BYTES = 16 MiB`
+  cap rejects pathological packs. A future "packed" variant can add zstd without breaking the
+  existing format.
+- No per-entry permissions, owners, or symlinks — we don't need them.
+
+---
+
+## ADR-015: Cairn → hosted deploys via platform-native manifests
+
+**Date:** 2026-06-20 (v0.5.0 Sprint 12)  
+**Status:** Accepted
+
+### Context
+The Docker compose stack is the canonical local-dev path. For one-click hosted deploys we
+needed Fly.io, Railway, and Render configs — but each platform has a different manifest
+format and a different way to mount persistent disks.
+
+### Decision
+Ship three platform-native templates under `deploy/`:
+- `fly.toml` — Fly's app config: machine size, persistent volume, http_checks on `/api/health`,
+  TCP+TLS handlers.
+- `railway.toml` — Railway's builder + deploy config with healthcheck + volume mount.
+- `render.yaml` — Render's blueprint with a `cairn` web service + a dev-only `cairn-helix`
+  worker (production should point `CAIRN_HELIX_URL` at a managed HelixDB).
+
+All three are opinionated: bind to `0.0.0.0`, set `CAIRN_INSECURE=1` (TLS terminates at the
+platform edge), and pin the image tag (`ghcr.io/vellixia/cairn:0.5.0`).
+
+### Rationale
+- Native manifests give each platform's tooling the metadata it needs (volume mounts,
+  healthchecks, replica counts) without us maintaining a parallel deploy CLI.
+- Dev-only `cairn-helix` worker on Render makes `Import Blueprint` succeed with zero config;
+  the README warns that it's not for production.
+
+### Trade-offs
+- Pinning the image tag means a security patch requires editing three files + cutting a
+  release. The release workflow updates them in lock-step.
+- `CAIRN_INSECURE=1` is acceptable inside Fly/Railway/Render (TLS at the edge) but is **not**
+  documented for self-hosted LAN use — that path still requires `CAIRN_TLS_CERT` +
+  `CAIRN_TLS_KEY` (see ADR-004).
+
+---
+
+## ADR-016: Non-root Docker volume init (proper `cairn-init`)
+
+**Date:** 2026-06-20 (v0.5.0 Sprint 12)  
+**Status:** Accepted
+
+### Context
+The Docker image runs as the `cairn` user (uid 10001) but anonymous Docker volumes come up
+owned by root. The pre-0.5.0 workaround was `user: "0"` on the cairn service, which meant the
+server process ran with full root inside the container — an unnecessary privilege escalation
+just to write a directory.
+
+### Decision
+Add a one-shot `cairn-init` service (alpine + `chown -R 10001:10001 /data`) that runs as root,
+completes, then exits. The `cairn` service depends on `cairn-init: service_completed_successfully`
+and runs as `user: "10001:10001"`.
+
+### Rationale
+- Init containers are the standard pattern for permission bootstrapping in compose / k8s.
+- `restart: "no"` so a chown failure doesn't loop; the cairn service's own startup error
+  surfaces the misconfiguration.
+- Verifies with `stat -c %u /data` so a host-bind mount (which overrides the chown) fails
+  fast with a useful message.
+
+### Trade-offs
+- One extra ~150 ms at first boot; negligible compared to the savings dashboard warm-up.
+- A host-bind (`-v /host/path:/data`) still requires the host directory to be writable by
+  uid 10001; the init container detects and fails fast.
+
+---
+
 ## See also
 
 - [Architecture](ARCHITECTURE.md) — how these decisions manifest in the code
