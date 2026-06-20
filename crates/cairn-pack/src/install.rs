@@ -15,7 +15,8 @@ use std::{
 };
 
 use crate::manifest::{verify_extracted, Manifest};
-use crate::{signing, MAX_UNCOMPRESSED_BYTES};
+use crate::signing::{self, PublicKey, VerifyError};
+use crate::MAX_UNCOMPRESSED_BYTES;
 
 /// Extract a `.cairnpkg` to `extract_root`. Returns the parsed manifest.
 ///
@@ -105,6 +106,32 @@ pub fn install(tarball: &Path, extract_root: &Path) -> io::Result<Manifest> {
 pub struct TarEntry {
     pub name: String,
     pub body: Vec<u8>,
+}
+
+/// Verify the Ed25519 signature on a parsed tarball, if present. Returns:
+/// - `Ok(true)` — a signature was present and verified against one of the supplied keys.
+/// - `Ok(false)` — the tarball has no `signature.ed25519` entry (legacy / unsigned pack).
+///   Integrity is still ensured by the per-file SHA-256 hashes; only authenticity is missing.
+/// - `Err(_)` — a signature was present but invalid, or referenced a key not in `trusted_keys`.
+///
+/// `trusted_keys` is the set of author public keys the local user has chosen to trust —
+/// usually pinned once and stored alongside the registry config.
+pub fn verify_ed25519_signature(
+    entries: &[TarEntry],
+    manifest_bytes: &[u8],
+    trusted_keys: &[PublicKey],
+) -> std::result::Result<bool, VerifyError> {
+    let Some(sig_entry) = entries.iter().find(|e| e.name == "signature.ed25519") else {
+        return Ok(false);
+    };
+    let sig_hex =
+        std::str::from_utf8(&sig_entry.body).map_err(|_| VerifyError::MalformedSignature)?;
+    for key in trusted_keys {
+        if signing::verify_manifest_ed25519(manifest_bytes, sig_hex.trim(), key).is_ok() {
+            return Ok(true);
+        }
+    }
+    Err(VerifyError::Mismatch)
 }
 
 /// Minimal ustar parser. Handles plain regular files; everything else is treated as a

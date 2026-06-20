@@ -12,6 +12,7 @@ members = [
     "crates/cairn-share",
     "crates/cairn-session",
     "crates/cairn-pack",
+    "crates/cairn-registry",
     "crates/cairn-embed",
     "crates/cairn-api",
     "crates/cairn-mcp",
@@ -40,6 +41,7 @@ cairn-profile = { path = "crates/cairn-profile" }
 cairn-share = { path = "crates/cairn-share" }
 cairn-session = { path = "crates/cairn-session" }
 cairn-pack = { path = "crates/cairn-pack" }
+cairn-registry = { path = "crates/cairn-registry" }
 cairn-embed = { path = "crates/cairn-embed" }
 cairn-api = { path = "crates/cairn-api" }
 cairn-mcp = { path = "crates/cairn-mcp" }
@@ -79,6 +81,8 @@ argon2 = "~0.5"
 rand = "~0.8"
 base64 = "~0.22"
 hmac = "~0.12"
+ed25519-dalek = { version = "~2.1", features = ["rand_core"] }
+rand_core = "~0.6"
 
 [profile.release]
 opt-level = 3

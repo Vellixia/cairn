@@ -35,6 +35,10 @@ pub mod signing;
 pub use install::parse_tar as tar;
 pub use manifest::Manifest;
 pub use pack::Pack;
+pub use signing::{
+    sign_manifest, sign_manifest_ed25519, verify_manifest_ed25519, Keypair, PublicKey, SignError,
+    VerifyError,
+};
 
 /// Canonical extension for Cairn context packages. The lean-ctx interop alias `.ctxpkg`
 /// is also accepted as an import format — see [`manifest::is_supported_extension`].

@@ -97,6 +97,37 @@ export function postJSON<T>(path: string, body: unknown): Promise<T> {
   return request<T>(path, { method: "POST", body });
 }
 
+/// Like [`postJSON`] but sends a raw `ArrayBuffer` with a caller-supplied content type.
+/// Used by the pack registry's `POST /registry/packs` endpoint, where the body is the
+/// tarball bytes rather than a JSON document.
+export async function postBinary<T>(
+  path: string,
+  body: ArrayBuffer,
+  contentType: string,
+): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": contentType },
+    body,
+  });
+  if (!res.ok) {
+    let parsed: unknown = null;
+    try {
+      parsed = await res.json();
+    } catch {
+      /* ignore */
+    }
+    const message =
+      typeof parsed === "object" && parsed && "error" in parsed
+        ? String((parsed as { error: unknown }).error)
+        : `${res.status} ${res.statusText}`;
+    throw new ApiError(res.status, message, parsed);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
 export function delJSON<T>(path: string): Promise<T> {
   return request<T>(path, { method: "DELETE" });
 }

@@ -17,6 +17,7 @@ cairn-shell.workspace = true
 cairn-profile.workspace = true
 cairn-share.workspace = true
 cairn-session.workspace = true
+cairn-registry.workspace = true
 cairn-embed.workspace = true
 cairn-mcp.workspace = true
 serde.workspace = true
@@ -40,5 +41,6 @@ async-stream = "0.3"
 futures-core = "0.3"
 
 [dev-dependencies]
+cairn-pack.workspace = true
 tempfile.workspace = true
 tower = { workspace = true, features = ["util"] }

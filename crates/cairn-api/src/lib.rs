@@ -16,6 +16,9 @@ mod setup_wizard;
 mod ui;
 
 pub use admin::ADMIN_META_KEY;
+pub use cairn_registry::{
+    PackMeta, PublishReceipt, PublishStatus, Registry, RegistryError, RevocationEvent,
+};
 pub use events::{EventBroker, EventPayload};
 
 use crate::admin::{self as admin_mod, auth_status, list_audit, login, logout, me, setup};
@@ -82,6 +85,8 @@ pub struct AppState {
     pub sessions: Arc<cairn_session::SessionStore>,
     /// Signed cost-savings ledger (v0.5.0 Sprint 5).
     pub ledger: LedgerState,
+    /// Self-hosted pack registry (v0.5.0 Sprint 13). Mounted under `/registry`.
+    pub registry: Option<Arc<cairn_registry::Registry>>,
     signer: Option<Arc<TokenSigner>>,
 }
 
@@ -127,6 +132,9 @@ impl AppState {
             started_at: metrics_mod::server_started(),
             sessions: Arc::new(cairn_session::SessionStore::new(cfg.data_dir.clone())),
             ledger: LedgerState::default(),
+            registry: cairn_registry::Registry::open(&cfg.data_dir)
+                .ok()
+                .map(Arc::new),
             signer,
         })
     }
@@ -225,6 +233,25 @@ pub fn router(state: AppState) -> Router {
         .with_state(state)
 }
 
+// Note: the registry router is mounted separately in `build_router_with_registry` below
+// because `axum::Router::merge` would force the registry to share the AppState, and the
+// registry's own state type is `Arc<Registry>`. We mount `/registry` at the top level so
+// the existing `/api/...` chain is unaffected.
+
+/// Build the full router (API + registry). When `state.registry` is `None`, the
+/// registry routes return 404 — useful for tests that don't want a registry on disk.
+pub fn build_router_with_registry(state: AppState) -> Router {
+    let base = router(state.clone());
+    match state.registry.as_ref() {
+        Some(reg) => base.merge(cairn_registry::router(reg.clone()).layer(
+            tower_http::limit::RequestBodyLimitLayer::new(
+                32 * 1024 * 1024, // 32 MiB for pack uploads
+            ),
+        )),
+        None => base,
+    }
+}
+
 /// Build a CORS layer from the configured origins. Empty origins means same-origin only (no
 /// cross-origin requests allowed). Specific origins are allowlisted explicitly.
 ///
@@ -316,7 +343,7 @@ pub async fn serve(addr: SocketAddr, mut state: AppState) -> std::io::Result<()>
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(
         listener,
-        router(state).into_make_service_with_connect_info::<SocketAddr>(),
+        build_router_with_registry(state).into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await
 }
@@ -340,7 +367,7 @@ async fn serve_https(
                 ),
             )
         })?;
-    let app = router(state).into_make_service_with_connect_info::<SocketAddr>();
+    let app = build_router_with_registry(state).into_make_service_with_connect_info::<SocketAddr>();
     axum_server::bind_rustls(addr, rustls).serve(app).await
 }
 
@@ -2199,5 +2226,139 @@ mod tests {
             body_str.contains(&format!("nonce=\"{nonce}\"")),
             "HTML should contain the nonce from the CSP header; nonce={nonce}"
         );
+    }
+
+    /// Registry HTTP integration: publish a signed pack, list it, download the tarball
+    /// back, then revoke and confirm the revocations log records it. Skips when
+    /// `CAIRN_HELIX_URL` is unset.
+    #[tokio::test]
+    async fn registry_publish_list_download_revoke_end_to_end() {
+        use axum::body::{to_bytes, Body};
+        use axum::http::{Request as HttpRequest, StatusCode as AxStatus};
+        use tower::ServiceExt;
+
+        use cairn_pack::{self, Pack};
+
+        let Some((state, dir)) = test_state() else {
+            return;
+        };
+        // Registry is created at <data_dir>/registry; data_dir is the AppState's data_dir.
+        let reg = state.registry.clone().expect("registry should be open");
+        let kp = cairn_pack::Keypair::generate();
+        reg.add_trusted_key(kp.public()).unwrap();
+
+        // Build a small signed tarball.
+        let tar_path = dir.path().join("alpha.cairnpkg");
+        let mut pack = Pack::new("alpha", "1.0.0");
+        pack.author = "tester".into();
+        pack.description = "http test".into();
+        pack.memories
+            .push(serde_json::json!({"id": "m1", "content": "hi"}));
+        pack.write_tarball_signed(&tar_path, &kp).unwrap();
+        let tar_bytes = std::fs::read(&tar_path).unwrap();
+
+        let app = build_router_with_registry(state);
+
+        // POST /registry/packs with the tarball body.
+        let resp = app
+            .clone()
+            .oneshot(
+                HttpRequest::builder()
+                    .method("POST")
+                    .uri("/registry/packs")
+                    .header("content-type", cairn_pack::MIME)
+                    .body(Body::from(tar_bytes.clone()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), AxStatus::CREATED);
+        let receipt: PublishReceipt =
+            serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
+        assert_eq!(receipt.name, "alpha");
+        assert_eq!(receipt.status, PublishStatus::Signed);
+
+        // GET /registry/packs — must include the published pack.
+        let resp = app
+            .clone()
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/registry/packs")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), AxStatus::OK);
+        let list: Vec<PackMeta> =
+            serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "alpha");
+
+        // GET /registry/packs/alpha/1.0.0/download — round-trip the bytes.
+        let resp = app
+            .clone()
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/registry/packs/alpha/1.0.0/download")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), AxStatus::OK);
+        let body = to_bytes(resp.into_body(), 1 << 20).await.unwrap();
+        assert_eq!(
+            body, tar_bytes,
+            "downloaded bytes should match published tarball"
+        );
+
+        // GET /registry/search?q=alp — substring match.
+        let resp = app
+            .clone()
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/registry/search?q=alp")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let hits: Vec<PackMeta> =
+            serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
+        assert_eq!(hits.len(), 1);
+
+        // DELETE /registry/packs/alpha/1.0.0 — revoke.
+        let resp = app
+            .clone()
+            .oneshot(
+                HttpRequest::builder()
+                    .method("DELETE")
+                    .uri("/registry/packs/alpha/1.0.0")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), AxStatus::OK);
+        let rev: RevocationEvent =
+            serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
+        assert_eq!(rev.name, "alpha");
+        assert_eq!(rev.version, "1.0.0");
+
+        // GET /registry/revocations must include it.
+        let resp = app
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/registry/revocations")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let revs: Vec<RevocationEvent> =
+            serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
+        assert_eq!(revs.len(), 1);
+        assert_eq!(revs[0].name, "alpha");
     }
 }

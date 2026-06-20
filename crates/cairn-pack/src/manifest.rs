@@ -39,6 +39,10 @@ pub struct Manifest {
     /// Map of in-archive path → sha256 hex digest.
     pub files: BTreeMap<String, String>,
     pub stats: ManifestStats,
+    /// Author public keys whose Ed25519 signatures appear in `signature.ed25519` files
+    /// inside the tarball. Empty for unsigned (legacy) packs.
+    #[serde(default)]
+    pub signers: Vec<crate::signing::PublicKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -73,6 +77,7 @@ impl Manifest {
             created_at: Utc::now(),
             files,
             stats,
+            signers: Vec::new(),
         }
     }
 

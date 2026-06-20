@@ -78,38 +78,6 @@
     );
     background-attachment: fixed;
   }
-<<<<<<< HEAD
-}
-
-/* Loading skeleton used by SessionGate during the first /api/auth/me probe. */
-.cairn-skeleton {
-  background: linear-gradient(
-    90deg,
-    #1a2129 0%,
-    #222b35 50%,
-    #1a2129 100%
-  );
-  background-size: 200% 100%;
-  animation: cairn-skeleton-pulse 1.4s ease-in-out infinite;
-  border-radius: 9px;
-}
-
-/* Keyboard focus ring — accessible, brand-tinted. */
-:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-=======
->>>>>>> fe4907f (feat(web): migrate to shadcn/ui + zustand + react-query)
 }
 
 /* Loading skeleton used by SessionGate during the first /api/auth/me probe. */

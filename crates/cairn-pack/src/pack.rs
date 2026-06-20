@@ -1,7 +1,7 @@
 //! Build / inspect / serialize a `.cairnpkg` tarball.
 
 use crate::manifest::{Manifest, ManifestStats};
-use crate::signing;
+use crate::signing::{self, PublicKey};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -28,6 +28,11 @@ pub struct Pack {
     pub patterns: Vec<serde_json::Value>,
     #[serde(default)]
     pub graph_edges: Vec<serde_json::Value>,
+    /// Optional author public key — set by [`Pack::write_tarball_signed`] and recorded in
+    /// the manifest's `signers` list. Not part of the on-disk format; lives only in the
+    /// builder.
+    #[serde(skip)]
+    pub signing_key: Option<PublicKey>,
 }
 
 impl Pack {
@@ -53,10 +58,38 @@ impl Pack {
     ///
     /// - `manifest.json` — at the top, JSON
     /// - `memory.jsonl`, `profile.jsonl`, `patterns.jsonl`, `graph.jsonl` — newline-delimited JSON
-    /// - `signature.sha256` — hex SHA-256 of the canonical manifest bytes
+    /// - `signature.sha256` — hex SHA-256 of the canonical manifest bytes (integrity only)
+    ///
+    /// For authenticity (proves the pack came from a specific author), call
+    /// [`Pack::write_tarball_signed`] with an Ed25519 keypair instead — it adds
+    /// `signature.ed25519` and embeds the author's public key in the manifest.
     ///
     /// We use the [tar] crate via the `tempfile` pattern (build in a tempdir, then rename).
     pub fn write_tarball(&self, output_path: &Path) -> io::Result<()> {
+        let mut pack = self.clone();
+        pack.signing_key = None;
+        pack.write_tarball_inner(output_path, None)
+    }
+
+    /// Write the pack with an Ed25519 signature. Adds `signature.ed25519` to the tarball
+    /// and embeds the author's public key in `manifest.signers`. The install path will
+    /// verify this signature when a public key is supplied via [`crate::install::verify_ed25519`].
+    pub fn write_tarball_signed(
+        &mut self,
+        output_path: &Path,
+        key: &signing::Keypair,
+    ) -> io::Result<PublicKey> {
+        let pub_key = key.public();
+        self.signing_key = Some(pub_key);
+        self.write_tarball_inner(output_path, Some(key))?;
+        Ok(pub_key)
+    }
+
+    fn write_tarball_inner(
+        &mut self,
+        output_path: &Path,
+        key: Option<&signing::Keypair>,
+    ) -> io::Result<()> {
         use std::io::Write as _;
         let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
         files.insert("memory.jsonl".into(), self.write_jsonl(&self.memories));
@@ -64,7 +97,7 @@ impl Pack {
         files.insert("patterns.jsonl".into(), self.write_jsonl(&self.patterns));
         files.insert("graph.jsonl".into(), self.write_jsonl(&self.graph_edges));
 
-        let manifest = Manifest::new(
+        let mut manifest = Manifest::new(
             self.name.clone(),
             self.version.clone(),
             self.author.clone(),
@@ -75,6 +108,9 @@ impl Pack {
                 .collect(),
             self.stats(),
         );
+        if let Some(k) = key {
+            manifest.signers.push(k.public());
+        }
         let manifest_bytes = manifest.to_bytes().map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -86,6 +122,12 @@ impl Pack {
             "signature.sha256".into(),
             signing::sign_manifest(&manifest_bytes).into_bytes(),
         );
+        if let Some(k) = key {
+            files.insert(
+                "signature.ed25519".into(),
+                signing::sign_manifest_ed25519(&manifest_bytes, k).into_bytes(),
+            );
+        }
 
         // Write the tarball. We hand-roll the ustar header format — small enough that
         // adding the `tar` crate as a dependency just for one writer is wasteful, and the
@@ -255,5 +297,89 @@ mod tests {
         assert_eq!(buf[156], b'0');
         // magic = "ustar\0"
         assert_eq!(&buf[257..263], b"ustar\0");
+    }
+
+    #[test]
+    fn write_tarball_signed_adds_ed25519_signature_and_signer_to_manifest() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("signed.cairnpkg");
+        let kp = signing::Keypair::generate();
+        let mut pack = Pack::new("signed", "1.0.0");
+        pack.author = "tester".into();
+        pack.memories
+            .push(serde_json::json!({"id": "m1", "content": "x"}));
+        let pubkey = pack.write_tarball_signed(&out, &kp).unwrap();
+        assert_eq!(pubkey, kp.public());
+
+        // Tarball must contain signature.ed25519 entry.
+        let bytes = fs::read(&out).unwrap();
+        assert!(bytes
+            .windows("signature.ed25519".len())
+            .any(|w| w == b"signature.ed25519"));
+
+        // Manifest must list the signer pubkey.
+        let entries = crate::install::parse_tar(&bytes).unwrap();
+        let manifest_entry = entries.iter().find(|e| e.name == "manifest.json").unwrap();
+        let m: Manifest = serde_json::from_slice(&manifest_entry.body).unwrap();
+        assert_eq!(m.signers.len(), 1);
+        assert_eq!(m.signers[0], kp.public());
+
+        // Round-trip verification using the trusted key should succeed.
+        let verified = crate::install::verify_ed25519_signature(
+            &entries,
+            &manifest_entry.body,
+            &[kp.public()],
+        )
+        .unwrap();
+        assert!(verified, "expected Ed25519 verification to succeed");
+    }
+
+    #[test]
+    fn unsigned_pack_has_no_signers_and_verify_returns_false() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("unsigned.cairnpkg");
+        let mut pack = Pack::new("plain", "0.1.0");
+        pack.memories
+            .push(serde_json::json!({"id": "m1", "content": "y"}));
+        pack.write_tarball(&out).unwrap();
+
+        let bytes = fs::read(&out).unwrap();
+        let entries = crate::install::parse_tar(&bytes).unwrap();
+        let manifest_entry = entries.iter().find(|e| e.name == "manifest.json").unwrap();
+        let m: Manifest = serde_json::from_slice(&manifest_entry.body).unwrap();
+        assert!(m.signers.is_empty());
+
+        let verified = crate::install::verify_ed25519_signature(
+            &entries,
+            &manifest_entry.body,
+            &[signing::Keypair::generate().public()],
+        )
+        .unwrap();
+        assert!(
+            !verified,
+            "unsigned pack should report no Ed25519 signature"
+        );
+    }
+
+    #[test]
+    fn wrong_trusted_key_rejects_signature() {
+        let dir = TempDir::new().unwrap();
+        let out = dir.path().join("wrong.cairnpkg");
+        let real_kp = signing::Keypair::generate();
+        let fake_kp = signing::Keypair::generate();
+        let mut pack = Pack::new("wrong-key", "1.0.0");
+        pack.memories
+            .push(serde_json::json!({"id": "m1", "content": "z"}));
+        pack.write_tarball_signed(&out, &real_kp).unwrap();
+
+        let bytes = fs::read(&out).unwrap();
+        let entries = crate::install::parse_tar(&bytes).unwrap();
+        let manifest_entry = entries.iter().find(|e| e.name == "manifest.json").unwrap();
+        let result = crate::install::verify_ed25519_signature(
+            &entries,
+            &manifest_entry.body,
+            &[fake_kp.public()],
+        );
+        assert!(result.is_err(), "wrong key must reject the signature");
     }
 }

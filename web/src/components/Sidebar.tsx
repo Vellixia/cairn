@@ -23,6 +23,7 @@ import {
   UserPlus,
   FileClock,
   UserCircle,
+  Library,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -82,6 +83,7 @@ const SECTIONS: Section[] = [
       { href: "/dashboard/share/sanitize", label: "Sanitize", icon: ShieldCheck },
       { href: "/dashboard/share/export", label: "Bundles", icon: Package },
       { href: "/dashboard/pool", label: "Pool", icon: Users },
+      { href: "/dashboard/registry", label: "Registry", icon: Library },
     ],
   },
   {
