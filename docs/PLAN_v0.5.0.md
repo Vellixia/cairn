@@ -572,6 +572,11 @@ pub struct Session {
 
 ### Phase 4.2 — Benchmarks + Adoption (2 sprints)
 
+> ✅ **Status (v0.5.0):** Both sprints shipped. `cairn-bench` crate holds the
+> LongMemEval/horizon/retention benchmarks (`455c34b`); the public landing page
+> lives at `web/src/app/page.tsx` with token savings, comparison table, install
+> commands, and a demo placeholder.
+
 **Sprint 16 — Benchmarks**
 - LongMemEval / LoCoMo recall scores
 - Task-success horizon benchmark

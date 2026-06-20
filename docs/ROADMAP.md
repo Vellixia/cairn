@@ -202,6 +202,10 @@ The product is feature-complete enough to install and use. The remaining work is
 | `cairn-server admin password` rotates + invalidates all sessions | Passed |
 | `cairn-server admin reset` clears admin via tombstone; next `/setup` succeeds | Passed |
 | Web: prebuilt `web/out/` committed; `cargo build` is hermetic (no Node required) | Passed |
+| Phase 4.1 (Sprint 13) — cairn-registry + Ed25519 pack signing | Passed | `cb06f9f` |
+| Phase 4.1 (Sprint 14) — Trust scopes + revocation cascade + provenance | Passed | `398a052` |
+| Phase 4.1 (Sprint 15) — cairn-sync CRDTs + E2E encryption + threat model | Passed | `06f5b4e` |
+| Phase 4.2 (Sprint 16) — cairn-bench + LongMemEval/horizon/retention | Passed | `455c34b` |
 
 ---
 
@@ -211,6 +215,7 @@ The product is feature-complete enough to install and use. The remaining work is
 - [Architecture](ARCHITECTURE.md) — how it works today
 - [Web](WEB.md) — admin/CLI auth split, dashboard surface
 - [Upgrading](UPGRADING.md) — 0.3.x → 0.4.0 migration
-- [Decisions](DECISIONS.md) — ADRs 001–016 (binary split through v0.5.0 distribution polish)
-- [Benchmarks](BENCHMARKS.md) — measured numbers
+- [Decisions](DECISIONS.md) — ADRs 001–022 (binary split through v0.5.0 distribution polish + Phase 4.1 federation)
+- [Benchmarks](BENCHMARKS.md) — measured numbers (LongMemEval + horizon + retention, Sprint 16)
+- [Security](../SECURITY.md) — threat model + hardening checklist
 - [Audit Report](audits/REPORT.md) — security findings with fix status

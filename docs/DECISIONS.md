@@ -713,6 +713,111 @@ each sync, the subscriber stores the new mark and passes it as `since=` next tim
 
 ---
 
+## ADR-023: Hand-built benchmark fixtures, not redistributed upstream data
+
+**Date:** 2026-06-20 (v0.5.0 Sprint 16)  
+**Status:** Accepted
+
+### Context
+LongMemEval (10k+ dialogs) and LoCoMo (similar scale) are the de-facto recall
+benchmarks for agent memory systems. Cairn should publish honest numbers on them.
+Two options:
+
+1. **Redistribute the upstream datasets** in `cairn-bench/fixtures/`. Simple but
+   likely violates the upstream licenses / distribution terms, and bloats the repo
+   by ~50 MB.
+2. **Hand-build small fixtures that capture the *shape* of those benchmarks** —
+   entity resolution across sessions, temporal ordering questions, distractors that
+   look similar. Run our own harness against them. Cross-reference against the
+   upstream datasets in a separate, optional doc.
+
+### Decision
+Ship 2 hand-built fixtures in `cairn-bench::fixture`:
+
+- `alex_employer_history` — 6 facts, 3 questions, exercises entity resolution
+  (Alex / Alexander / Al across sessions) + temporal recall.
+- `migration_timeline` — 5 facts, 2 questions, sequential events with
+  unrelated distractors.
+
+The `LongMemEvalBenchmark` harness grades recall via lexical keyword overlap.
+Numbers are deterministic for a given fixture set and published in
+`docs/BENCHMARKS.md`. Instructions for running the upstream LongMemEval against
+this same harness (for apples-to-apples comparison) live in BENCHMARKS.md.
+
+### Rationale
+- Repo size stays small. The upstream datasets can be downloaded separately by
+  anyone who wants the real numbers.
+- License compliance is unambiguous — we wrote every fixture from scratch.
+- The benchmark still demonstrates the *shape* of recall quality (does our
+  confidence + vector clock + hybrid search combo actually surface the right
+  memory?), which is the question that matters for v0.5.0.
+
+### Trade-offs
+- Recall scores from this fixture are *not* directly comparable to published
+  LongMemEval / LoCoMo numbers. A reader who wants that comparison has to run the
+  upstream dataset themselves.
+- The fixtures are small enough that a lexical baseline scores 100% — the
+  benchmark tells us nothing about paraphrase/negation/multi-hop. A future
+  Sprint 22 (voice ingestion) release will add a paraphrased-fixture variant.
+
+---
+
+## ADR-024: Single Next.js landing page, fallback HTML for missing builds
+
+**Date:** 2026-06-20 (v0.5.0 Sprint 17)  
+**Status:** Accepted
+
+### Context
+A v0.5.0 release needs a public landing page (`/`) for:
+- Marketing (hero, comparison table, install paths)
+- A demo GIF / video placeholder
+- Trust signals (Apache-2.0, no telemetry, signed releases)
+- Links into docs (BENCHMARKS, ARCHITECTURE, SECURITY)
+
+Two places to put this:
+1. **Inside the Next.js export** at `web/src/app/page.tsx` — beautiful when
+   `web/out/` is built, but silently broken when it's missing (the cairn-server's
+   static fallback serves a generic HTML page).
+2. **Inside cairn-api** as `INDEX_HTML` — always works, but can't be themed or
+   react-query'd, and any change requires a Rust rebuild + cairn-server upgrade.
+
+### Decision
+Ship **both**, with the Next.js export as canonical and the Rust fallback as
+"good enough for a smoke test":
+
+- `web/src/app/page.tsx` — the canonical landing page. Hero + comparison table +
+  install cards + trust signals + footer. Built into the static export alongside
+  the dashboard.
+- `crates/cairn-api/src/ui.rs::INDEX_HTML` — a minimal branded HTML page served at
+  `/` when `web/out/` is missing. Renders the same install commands + a smaller
+  before/after table so a fresh checkout still has something to look at before
+  the dashboard is reached.
+
+Both pages share the same colour palette + logo SVG so a reader who sees the
+fallback first still recognises the canonical page when they rebuild with
+`npm run build`.
+
+### Rationale
+- Best-of-both: canonical in Next.js for marketing polish, always-on in Rust for
+  diagnostics.
+- The fallback path also exercises the static-asset pipeline (`rust-embed`'s
+  `WebAssets::get`), which is the same code path that serves the dashboard in
+  production — useful to keep honest.
+- A demo GIF placeholder is rendered with a dashed border + "placeholder" label
+  in the corner so the canonical page doesn't look broken while waiting for the
+  real recording.
+
+### Trade-offs
+- Two pages to keep visually consistent. We rely on a shared colour palette
+  rather than shared React components, so a style tweak has to land in both
+  places. A future iteration could generate the fallback page from the same
+  React tree with `output: "export"` fallback rules.
+- The Next.js landing page can't be A/B-tested easily — any change requires a
+  rebuild + redeploy. The static nature is intentional (no auth, no fetches) so
+  the rebuild cost is small.
+
+---
+
 ## See also
 
 - [Architecture](ARCHITECTURE.md) — how these decisions manifest in the code

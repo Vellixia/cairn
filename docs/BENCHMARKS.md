@@ -202,5 +202,7 @@ These are planned but not yet implemented:
 ## See also
 
 - [Architecture](ARCHITECTURE.md) — how the assemble + retention pipeline works internally
-- [Roadmap](ROADMAP.md) — benchmark implementation status
+- [Roadmap](ROADMAP.md) — benchmark implementation status (Sprint 16 marked done)
+- [Plan](PLAN_v0.5.0.md) — benchmark targets (Sprint 16) and CI plan
 - [ADR-023](DECISIONS.md) — why we hand-build fixtures instead of redistributing upstream data
+- [ADR-024](DECISIONS.md) — landing-page architecture (Sprint 17)
