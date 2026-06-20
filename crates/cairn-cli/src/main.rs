@@ -14,6 +14,7 @@ use clap::{Parser, Subcommand};
 
 mod bench;
 mod doctor;
+mod extra;
 mod hook;
 mod onboard;
 mod pair;
@@ -116,6 +117,36 @@ enum Cmd {
         #[arg(long)]
         token: Option<String>,
     },
+    /// Build / query the memory provenance graph (Sprint 9).
+    Graph {
+        #[command(subcommand)]
+        action: GraphCmd,
+    },
+    /// Memory commands that go beyond remember / recall / wakeup (Sprint 9).
+    Memory {
+        #[command(subcommand)]
+        action: MemoryCmd,
+    },
+    /// Hybrid search (RRF + MMR) over the local store (Sprint 9).
+    Search {
+        query: String,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// List sessions on the server.
+    Sessions {
+        #[arg(long)]
+        server: Option<String>,
+        #[arg(long)]
+        token: Option<String>,
+    },
+    /// Show or update a single session.
+    Session {
+        #[command(subcommand)]
+        action: SessionCmd,
+    },
+    /// Print local metrics (memory/checkpoint counts). Live savings go through /api/metrics.
+    Metrics,
     /// Write per-agent instruction files that tell the model to use Cairn's tools.
     Rules {
         /// Agent: claude-code, cursor, vscode, windsurf, opencode, agents. Omit with --all.
@@ -181,6 +212,50 @@ enum Cmd {
         /// Treat the file as a sanitized share bundle and ingest it as shared memories.
         #[arg(long)]
         share: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum GraphCmd {
+    /// List memories that `applies_to <path>`.
+    Related { path: String },
+    /// Blast radius for a file (planned v0.5.x; see `cairn graph related` today).
+    Impact { path: String },
+    /// Callers/callees for a symbol (planned v0.5.x).
+    Callgraph { symbol: String },
+}
+
+#[derive(Subcommand)]
+enum MemoryCmd {
+    /// Newest-first memory timeline (default 20 entries).
+    Timeline {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Promote working-tier memories to a semantic crystal (agentmemory pattern).
+    Crystallize,
+}
+
+#[derive(Subcommand)]
+enum SessionCmd {
+    /// Show a session by id.
+    Show {
+        id: String,
+        #[arg(long)]
+        server: Option<String>,
+        #[arg(long)]
+        token: Option<String>,
+    },
+    /// Append a task to a session.
+    Task {
+        id: String,
+        task_id: String,
+        title: String,
+        progress: String,
+        #[arg(long)]
+        server: Option<String>,
+        #[arg(long)]
+        token: Option<String>,
     },
 }
 
@@ -325,6 +400,56 @@ async fn main() -> anyhow::Result<()> {
             let root = path
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
             bench::run(&s, &root)?;
+        }
+        Cmd::Graph { action } => {
+            let s = State::open(&cfg)?;
+            match action {
+                GraphCmd::Related { path } => extra::graph(extra::GraphCmd::Related { path }, &s)?,
+                GraphCmd::Impact { path } => extra::graph(extra::GraphCmd::Impact { path }, &s)?,
+                GraphCmd::Callgraph { symbol } => {
+                    extra::graph(extra::GraphCmd::Callgraph { symbol }, &s)?
+                }
+            }
+        }
+        Cmd::Memory { action } => {
+            let s = State::open(&cfg)?;
+            match action {
+                MemoryCmd::Timeline { limit } => extra::memory_timeline(&s, limit)?,
+                MemoryCmd::Crystallize => extra::memory_crystallize(&s)?,
+            }
+        }
+        Cmd::Search { query, limit } => {
+            let s = State::open(&cfg)?;
+            extra::search(&s, &query, limit)?;
+        }
+        Cmd::Sessions { server, token } => {
+            extra::sessions_list(server.as_deref(), token.as_deref())?;
+        }
+        Cmd::Session { action } => match action {
+            SessionCmd::Show { id, server, token } => {
+                extra::session_show(server.as_deref(), token.as_deref(), &id)?;
+            }
+            SessionCmd::Task {
+                id,
+                task_id,
+                title,
+                progress,
+                server,
+                token,
+            } => {
+                extra::session_task(
+                    server.as_deref(),
+                    token.as_deref(),
+                    &id,
+                    &task_id,
+                    &title,
+                    &progress,
+                )?;
+            }
+        },
+        Cmd::Metrics => {
+            let s = State::open(&cfg)?;
+            extra::metrics(&s)?;
         }
         Cmd::Pair { code, server } => {
             let s = State::open(&cfg)?;
