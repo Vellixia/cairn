@@ -5,12 +5,13 @@ import { CairnSidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { CommandPalette } from "@/components/CommandPalette";
 import { Shortcuts } from "@/components/Shortcuts";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 /**
  * Dashboard shell. Wraps everything in <SessionGate>, which probes auth + redirects unauth'd
- * users to /login. Renders the sidebar (flat, non-collapsible) + sticky topbar + the active
- * section via `children`. The command palette and shortcuts modal are mounted here so they're
- * available on every dashboard page.
+ * users to /login. <SidebarProvider> establishes the flex row that holds the sidebar and the
+ * main content side-by-side (matches shadcn sidebar pattern). The command palette and
+ * shortcuts modal are mounted here so they're available on every dashboard page.
  */
 export default function DashboardLayout({
   children,
@@ -19,7 +20,7 @@ export default function DashboardLayout({
 }) {
   return (
     <SessionGate>
-      <div className="min-h-screen flex">
+      <SidebarProvider>
         <CairnSidebar />
         <div className="flex-1 flex min-w-0 flex-col">
           <Topbar />
@@ -27,7 +28,7 @@ export default function DashboardLayout({
             {children}
           </main>
         </div>
-      </div>
+      </SidebarProvider>
       <CommandPalette />
       <Shortcuts />
     </SessionGate>

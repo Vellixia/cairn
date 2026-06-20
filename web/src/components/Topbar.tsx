@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Kbd } from "@/components/ui/kbd";
 import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useHealthQuery, useLogoutMutation } from "@/lib/queries";
 import { useMeStore } from "@/lib/stores/me";
 import { useUIStore } from "@/lib/stores/ui";
@@ -36,6 +37,7 @@ export function Topbar() {
     <header className="sticky top-0 z-10 border-b border-line bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex items-center justify-between gap-4 px-5 py-3">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <SidebarTrigger className="md:hidden" />
           <Button
             variant="outline"
             size="sm"
