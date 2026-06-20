@@ -5,9 +5,16 @@
 # Node / web
 /web/node_modules
 /web/.next
-/web/out/*
+/web/out
 !/web/out/.gitkeep
+/web/out/_next/static/**/*.js.map
 /web/dist
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Local dogfood testing artifacts
+/dogfood-output
 
 # Cairn runtime data
 /data

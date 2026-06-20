@@ -708,6 +708,7 @@ mod live {
                 url: None,
                 api_key: None,
             },
+            admin: cairn_core::AdminConfig::default(),
         };
         Some(HelixBackend::connect(&url, &cfg).expect("connect to live HelixDB"))
     }

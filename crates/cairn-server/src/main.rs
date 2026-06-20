@@ -43,6 +43,22 @@ enum Cmd {
         #[command(subcommand)]
         action: TokenCmd,
     },
+    /// Recover or rotate the dashboard admin account (loopback-only).
+    Admin {
+        #[command(subcommand)]
+        action: AdminCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum AdminCmd {
+    /// Rotate the admin password. Reads the new password from CAIRN_ADMIN_PASSWORD (env) or
+    /// stdin. Bumps the admin generation so every existing cookie session is invalidated.
+    /// Refused on non-loopback binds — same pattern as the TLS gate.
+    Password,
+    /// Delete the admin record. The next loopback visit to /setup creates a new admin.
+    /// Refused on non-loopback binds. Use this when the password is lost.
+    Reset,
 }
 
 #[derive(Subcommand)]
@@ -174,6 +190,103 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
+        Cmd::Admin { action } => {
+            // Admin recovery commands are loopback-only. The TLS gate already enforces this for
+            // serving plain HTTP on a non-loopback bind; we mirror it here so the data dir
+            // can't be mutated from a remote operator's session.
+            if !cfg.is_loopback_host() {
+                anyhow::bail!(
+                    "cairn admin is loopback-only (host={}). Bind the server to 127.0.0.1 \
+                     or run from the same host that owns the data dir.",
+                    cfg.host
+                );
+            }
+            let state = AppState::new(&cfg)?;
+            match action {
+                AdminCmd::Password => admin::rotate_password(&state, &cfg)?,
+                AdminCmd::Reset => admin::reset(&state)?,
+            }
+        }
     }
     Ok(())
+}
+
+mod admin {
+    use anyhow::{Context, Result};
+    use cairn_api::AppState;
+    use cairn_core::{hash_password, AdminRecord};
+    use std::io::{self, IsTerminal, Read};
+
+    /// Read the new password from `CAIRN_ADMIN_PASSWORD` env, otherwise from stdin (with
+    /// echo suppressed where the terminal supports it). Refuses empty / too-short values.
+    fn read_password() -> Result<String> {
+        if let Ok(p) = std::env::var("CAIRN_ADMIN_PASSWORD") {
+            if !p.trim().is_empty() {
+                return Ok(p);
+            }
+        }
+        eprint!("new admin password: ");
+        let mut s = String::new();
+        if io::stdin().is_terminal() {
+            // Best-effort echo suppression. On Windows there's no portable raw-mode API in std,
+            // so we just read and emit a newline after — adequate for the admin recovery flow.
+            io::stdin()
+                .read_line(&mut s)
+                .context("reading password from stdin")?;
+            eprintln!();
+        } else {
+            io::stdin()
+                .read_to_string(&mut s)
+                .context("reading password from stdin")?;
+        }
+        let trimmed = s.trim().to_string();
+        if trimmed.len() < 8 {
+            anyhow::bail!("password must be at least 8 characters");
+        }
+        Ok(trimmed)
+    }
+
+    pub fn rotate_password(state: &AppState, _cfg: &cairn_core::Config) -> Result<()> {
+        let new_password = read_password()?;
+        let mut rec: AdminRecord = match state
+            .store
+            .get_meta_live(cairn_api::ADMIN_META_KEY)
+            .context("loading admin record")?
+        {
+            Some(json) => serde_json::from_str(&json).context("decoding admin record")?,
+            None => anyhow::bail!(
+                "no admin configured. Run `cairn-server serve` and visit /setup on loopback \
+                 to create the first admin, then use this command to rotate."
+            ),
+        };
+        let hash = hash_password(&new_password).context("hashing new password")?;
+        rec.rotate_password(hash);
+        let json = serde_json::to_string(&rec).context("encoding admin record")?;
+        state
+            .store
+            .set_meta(cairn_api::ADMIN_META_KEY, &json)
+            .context("persisting admin record")?;
+        println!(
+            "admin '{}' password rotated; generation is now {} \
+             (every existing cookie session is invalidated).",
+            rec.username, rec.generation
+        );
+        Ok(())
+    }
+
+    pub fn reset(state: &AppState) -> Result<()> {
+        let existed = state
+            .store
+            .reset_meta(cairn_api::ADMIN_META_KEY)
+            .context("clearing admin record")?;
+        if !existed {
+            println!("no admin configured; nothing to reset");
+        } else {
+            println!(
+                "admin deleted. Visit /setup on loopback to create a new admin. \
+                 (The data dir may still contain a tombstone; that's fine — reads treat it as absent.)"
+            );
+        }
+        Ok(())
+    }
 }

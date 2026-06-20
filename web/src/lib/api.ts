@@ -1,31 +1,118 @@
-// Tiny typed client for the Cairn HTTP API.
+// Typed HTTP client for the Cairn API.
 //
-// The dashboard is a static export served BY the cairn server, so by default it talks to whatever
-// origin it was loaded from (`window.location.origin`). That means opening the dashboard at
-// http://your-server:7777 just works — no rebuild, no hardcoded localhost. Set NEXT_PUBLIC_CAIRN_API
-// only for split deploys (UI hosted separately from the API).
-function resolveBase(): string {
-  if (process.env.NEXT_PUBLIC_CAIRN_API) return process.env.NEXT_PUBLIC_CAIRN_API;
-  if (typeof window !== "undefined") return window.location.origin;
-  return "http://127.0.0.1:7777"; // build/SSR fallback (replaced at runtime in the browser)
+// The dashboard is a static export served BY the cairn server, so by default it talks to
+// whatever origin it was loaded from (`window.location.origin`). That means opening the
+// dashboard at http://your-server:7777 just works — no rebuild, no hardcoded localhost.
+//
+// All calls send `credentials: "include"` so the cairn_session cookie rides along. On a 401
+// from any non-auth endpoint, the user is bounced to /login (or /setup on first run).
+
+export function resolveApiBase(): string {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_CAIRN_API) {
+    return process.env.NEXT_PUBLIC_CAIRN_API;
+  }
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+  return "http://127.0.0.1:7777";
 }
 
-export const API_BASE = resolveBase();
+export const API_BASE = resolveApiBase();
 
-export async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`);
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  return (await res.json()) as T;
+const AUTH_PATHS = new Set([
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/setup",
+  "/api/auth/status",
+  "/api/auth/me",
+  "/api/health",
+  "/api/pair/claim",
+]);
+
+function isAuthPath(path: string): boolean {
+  return AUTH_PATHS.has(path);
 }
 
-export async function postJSON<T>(path: string, body: unknown): Promise<T> {
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+  constructor(status: number, message: string, body: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+export interface RequestOptions extends Omit<RequestInit, "body"> {
+  body?: unknown;
+}
+
+export async function request<T>(
+  path: string,
+  init: RequestOptions = {},
+): Promise<T> {
+  const { body, headers, ...rest } = init;
   const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    credentials: "include",
+    ...rest,
+    headers: {
+      "content-type": "application/json",
+      ...(headers ?? {}),
+    },
+    body: body == null ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    let parsed: unknown = null;
+    try {
+      parsed = await res.json();
+    } catch {
+      try {
+        parsed = await res.text();
+      } catch {
+        /* ignore */
+      }
+    }
+    const message =
+      typeof parsed === "object" && parsed && "error" in parsed
+        ? String((parsed as { error: unknown }).error)
+        : `${res.status} ${res.statusText}`;
+    if (res.status === 401 && !isAuthPath(path) && typeof window !== "undefined") {
+      const from = encodeURIComponent(
+        window.location.pathname + window.location.search,
+      );
+      window.location.assign(`/login?from=${from}`);
+    }
+    throw new ApiError(res.status, message, parsed);
+  }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+export function getJSON<T>(path: string): Promise<T> {
+  return request<T>(path, { method: "GET" });
+}
+
+export function postJSON<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, { method: "POST", body });
+}
+
+export function delJSON<T>(path: string): Promise<T> {
+  return request<T>(path, { method: "DELETE" });
+}
+
+// ---- Wire types -------------------------------------------------------------
+
+export interface Me {
+  username: string;
+  generation: number;
+  login_at: number;
+  expires_at: number;
+}
+
+export interface AuthStatus {
+  admin_exists: boolean;
+  setup_required: boolean;
 }
 
 export interface Health {
@@ -33,6 +120,15 @@ export interface Health {
   name: string;
   version: string;
 }
+
+export interface Stats {
+  memories: number;
+  checkpoints?: number;
+  preferences?: number;
+  anchor?: string | null;
+  reliability?: Reliability;
+}
+
 export interface Reliability {
   score: number;
   samples: number;
@@ -41,13 +137,7 @@ export interface Reliability {
   danger: number;
   rollbacks: number;
 }
-export interface Stats {
-  memories: number;
-  checkpoints?: number;
-  preferences?: number;
-  anchor?: string | null;
-  reliability?: Reliability;
-}
+
 export interface Checkpoint {
   id: string;
   created_at: string;
@@ -59,6 +149,7 @@ export interface RollbackReport {
   restored: string[];
   skipped: string[];
 }
+
 export type Sensitivity = "shareable" | "needs_review" | "private";
 export interface Finding {
   kind: string;
@@ -70,6 +161,7 @@ export interface Sanitized {
   findings: Finding[];
   sensitivity: Sensitivity;
 }
+
 export interface ShareExport {
   schema: string;
   version: number;
@@ -92,6 +184,7 @@ export interface Pool {
   count: number;
   memories: PoolMemory[];
 }
+
 export interface Memory {
   id: string;
   kind: string;
@@ -108,6 +201,7 @@ export interface ScoredMemory {
   memory: Memory;
   score: number;
 }
+
 export interface ReadResult {
   path: string;
   hash: string;
@@ -118,4 +212,30 @@ export interface ReadResult {
   view: string;
   note: string;
   est_tokens: number;
+}
+
+export interface DeviceTokenMeta {
+  id: string;
+  name: string;
+  scope: string;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+}
+
+export interface IssuedToken extends DeviceTokenMeta {
+  token: string;
+}
+
+export interface PairCode {
+  code: string;
+  name: string;
+  expires_at: string;
+}
+
+export interface AuditEvent {
+  ts: number;
+  kind: string;
+  actor: string;
+  detail: string;
 }
