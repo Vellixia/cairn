@@ -169,11 +169,11 @@ The product is feature-complete enough to install and use. The remaining work is
 
 | Item | Status | Notes |
 |---|---|---|
-| OpenCode README quickstart | Partial | OpenCode integration is verified end-to-end (remember/recall/sanitize/read), but the README still needs a one-screen "set up OpenCode in 4 commands" section that mirrors the live test |
+| OpenCode README quickstart | Done | New "OpenCode quickstart" section in README + Homebrew promoted to recommended install path |
 | Multi-platform release binaries | Not started | `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, `aarch64-pc-windows-msvc`; upload + `SHA256SUMS` per release |
-| Homebrew tap | Not started | `Vellixia/homebrew-tap`; formula points at the GitHub release, verifies `SHA256SUMS`; `brew install cairn` |
-| One-click deploy (Fly / Railway / Render) | Not started | `render.yaml` + `fly.toml` templates; "Deploy to…" buttons in README |
-| Non-root Docker volume init | Not started | Currently `user: "0"` workaround. Proper init container or capability grant so the runtime can drop to `cairn` uid 10001 |
+| Homebrew tap | Done | `packaging/homebrew-tap/cairn.rb`; tap lives at `Vellixia/homebrew-tap`; `brew install Vellixia/tap/cairn` installs both binaries |
+| One-click deploy (Fly / Railway / Render) | Done | `deploy/fly.toml`, `deploy/railway.toml`, `deploy/render.yaml` with platform-native manifests + healthchecks + persistent volumes |
+| Non-root Docker volume init | Done | New `cairn-init` one-shot chowns `/data` to uid 10001, verifies with `stat`, fails fast on host-bind misconfig. cairn service runs as `user: "10001:10001"` — verified live (`uid=10001(cairn)`) |
 | LongMemEval / LoCoMo benchmarks | Not started | Standard recall benchmarks; publish numbers in `docs/BENCHMARKS.md` |
 | Task-success lift at increasing horizons | Not started | Synthetic drift benchmark; cite the architecture justification in `docs/PLAN.md` |
 
@@ -184,9 +184,9 @@ The product is feature-complete enough to install and use. The remaining work is
 | Milestone | Status |
 |---|---|
 | Fresh clone builds (`cargo check --workspace`) | Passed |
-| `cargo test --workspace` (118 tests, 5 ignored) | Passed |
-| `cargo clippy --workspace -- -D warnings` | Passed |
-| `docker compose up -d` from clean checkout | Passed |
+| `cargo test --workspace` (225 tests, 5 ignored — v0.5.0) | Passed |
+| `cargo clippy --workspace --all-targets -- -D warnings` | Passed |
+| `docker compose up -d` from clean checkout (cairn runs as uid 10001, not root) | Passed (verified live in v0.5.0) |
 | Docker compose health checks (all 3 services `healthy`) | Passed (verified live) |
 | 54-test end-to-end live suite (memory/context/guard/profile/shell/assembly/sanitize/sync/share/api/setup/bench/path-rewrite) | Passed (verified live) — see `docs/TESTING.md` |
 | `cairn-cli bench` shows 90%+ savings | Passed |
@@ -211,6 +211,6 @@ The product is feature-complete enough to install and use. The remaining work is
 - [Architecture](ARCHITECTURE.md) — how it works today
 - [Web](WEB.md) — admin/CLI auth split, dashboard surface
 - [Upgrading](UPGRADING.md) — 0.3.x → 0.4.0 migration
-- [Decisions](DECISIONS.md) — ADRs, including ADR-010 (single-admin split)
+- [Decisions](DECISIONS.md) — ADRs 001–016 (binary split through v0.5.0 distribution polish)
 - [Benchmarks](BENCHMARKS.md) — measured numbers
 - [Audit Report](audits/REPORT.md) — security findings with fix status
