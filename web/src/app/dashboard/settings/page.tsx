@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,6 +111,20 @@ export default function SettingsPage() {
               <code>/api/health</code>
             </dd>
           </dl>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Personalization</CardTitle>
+          <CardDescription>
+            Standing preferences honored by every Cairn-backed agent.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/profile">Open profile</Link>
+          </Button>
         </CardContent>
       </Card>
 

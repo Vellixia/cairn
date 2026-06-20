@@ -99,6 +99,14 @@ impl MemoryEngine {
         for s in &scored {
             let _ = self.store.touch_memory(&s.memory.id);
         }
+        // Apply the agentmemory reinforcement curve on each returned memory. The bump is best-
+        // effort — a transient store error must not break recall (the agent still gets its
+        // answer; we just lose a small confidence nudge for this turn).
+        for s in &scored {
+            if let Err(e) = self.store.reinforce_memory(&s.memory.id) {
+                tracing::warn!(memory_id = %s.memory.id, error = %e, "reinforce failed");
+            }
+        }
         Ok(scored)
     }
 
@@ -145,6 +153,164 @@ impl MemoryEngine {
         }
         Ok(promoted)
     }
+
+    /// Edit a memory's content/importance/concepts/files. Pass `None` to leave a field alone.
+    /// `confidence` and `pinned` are deliberately NOT editable here — they have their own
+    /// helpers (`reinforce` happens on recall, `pin` is a single toggle).
+    pub fn edit(
+        &self,
+        id: &str,
+        content: Option<String>,
+        importance: Option<f32>,
+        concepts: Option<Vec<String>>,
+        files: Option<Vec<String>>,
+    ) -> Result<Option<Memory>> {
+        let updated = self.store.edit_memory(id, content, importance, concepts, files)?;
+        if !updated {
+            return Ok(None);
+        }
+        Ok(self.store.get_memory(id)?)
+    }
+
+    /// Pin or unpin a memory. Pinned memories are kept around even when their confidence
+    /// decays; they show up first in wakeup regardless of score.
+    pub fn pin(&self, id: &str, pinned: bool) -> Result<bool> {
+        self.store.set_pinned(id, pinned)?;
+        Ok(self.store.get_memory(id)?.is_some())
+    }
+
+    /// Delete a memory by id. Returns `true` if the memory existed and was removed.
+    pub fn delete(&self, id: &str) -> Result<bool> {
+        self.store.delete_memory(id)
+    }
+
+    /// Crystallize working-tier memories for `session_id` (or all working memories if `None`)
+    /// into a single semantic-tier "crystal" memory — the agentmemory pattern. The crystal's
+    /// content is a deterministic summary (first content + count + latest timestamps), its
+    /// `derived_from` edge links to every input, and each input gets a `supersedes` edge back.
+    /// Returns the crystal's id.
+    pub fn crystallize(&self, session_id: Option<&str>) -> Result<Option<String>> {
+        let inputs: Vec<Memory> = self
+            .store
+            .all_memories()?
+            .into_iter()
+            .filter(|m| m.tier == MemoryTier::Working)
+            .filter(|m| match session_id {
+                Some(sid) => m.session_id.as_deref() == Some(sid),
+                None => true,
+            })
+            .collect();
+        if inputs.is_empty() {
+            return Ok(None);
+        }
+        let mut nm = NewMemory::new(format!(
+            "Crystal of {} working memories: {}",
+            inputs.len(),
+            inputs[0].content
+        ));
+        nm.kind = Some(inputs[0].kind);
+        nm.tier = Some(MemoryTier::Semantic);
+        nm.importance = Some(0.85);
+        nm.derived_from = inputs.iter().map(|m| m.id.clone()).collect();
+        nm.concepts = inputs[0].concepts.clone();
+        let crystal = self.remember(nm)?;
+        // Mark each input as superseded by the crystal — this is the per-input edge update.
+        for input in inputs {
+            let mut updated = input.clone();
+            updated.supersedes.push(crystal.id.clone());
+            updated.tier = MemoryTier::Episodic; // crystalized: working -> episodic
+            updated.updated_at = Utc::now();
+            let _ = self.store.upsert_memory(&updated);
+        }
+        Ok(Some(crystal.id))
+    }
+
+    /// Build the memory provenance graph for the dashboard. Returns nodes (memories) and edges
+    /// (the four edge kinds).
+    pub fn graph(&self) -> Result<MemoryGraph> {
+        let mems = self.store.all_memories()?;
+        let nodes: Vec<MemoryGraphNode> = mems
+            .iter()
+            .map(|m| MemoryGraphNode {
+                id: m.id.clone(),
+                kind: m.kind.as_str().to_string(),
+                tier: m.tier.as_str().to_string(),
+                content_preview: preview(&m.content, 120),
+                confidence: m.confidence,
+                pinned: m.pinned,
+                importance: m.importance,
+            })
+            .collect();
+        let mut edges: Vec<MemoryGraphEdge> = Vec::new();
+        for m in &mems {
+            for target in &m.derived_from {
+                edges.push(MemoryGraphEdge {
+                    source: m.id.clone(),
+                    target: target.clone(),
+                    kind: "derived_from".into(),
+                });
+            }
+            for target in &m.contradicts {
+                edges.push(MemoryGraphEdge {
+                    source: m.id.clone(),
+                    target: target.clone(),
+                    kind: "contradicts".into(),
+                });
+            }
+            for target in &m.supersedes {
+                edges.push(MemoryGraphEdge {
+                    source: m.id.clone(),
+                    target: target.clone(),
+                    kind: "supersedes".into(),
+                });
+            }
+            for target in &m.applies_to {
+                // applies_to points at a file/symbol/project, not a memory id — we model it
+                // as a graph node with kind "external" so the dashboard can render it.
+                edges.push(MemoryGraphEdge {
+                    source: m.id.clone(),
+                    target: target.clone(),
+                    kind: "applies_to".into(),
+                });
+            }
+        }
+        Ok(MemoryGraph { nodes, edges })
+    }
+}
+
+/// A trimmed memory for graph rendering — keeps the payload small for the dashboard.
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryGraphNode {
+    pub id: String,
+    pub kind: String,
+    pub tier: String,
+    pub content_preview: String,
+    pub confidence: f32,
+    pub pinned: bool,
+    pub importance: f32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryGraphEdge {
+    pub source: String,
+    pub target: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryGraph {
+    pub nodes: Vec<MemoryGraphNode>,
+    pub edges: Vec<MemoryGraphEdge>,
+}
+
+fn preview(content: &str, max: usize) -> String {
+    if content.chars().count() <= max {
+        content.to_string()
+    } else {
+        let mut out: String = content.chars().take(max).collect();
+        out.push('…');
+        out
+    }
 }
 
 fn priority(m: &Memory, now: chrono::DateTime<Utc>) -> f32 {
@@ -157,7 +323,13 @@ fn priority(m: &Memory, now: chrono::DateTime<Utc>) -> f32 {
         MemoryKind::Note => 0.3,
     };
     let age_days = ((now - m.created_at).num_seconds() as f32 / 86_400.0).max(0.0);
-    kind_weight + m.importance + retention(age_days, m.access_count, m.importance) * 0.5
+    // Pinned memories always surface first regardless of age/decay. The +2.0 is enough to
+    // outweigh any plausible kind_weight + importance + retention sum.
+    let pin_boost = if m.pinned { 2.0 } else { 0.0 };
+    kind_weight
+        + m.importance
+        + retention(age_days, m.access_count, m.importance) * 0.5
+        + pin_boost
 }
 
 /// Ebbinghaus-style retention in `[0, 1]`: how strongly a memory is held right now. Stability
@@ -166,6 +338,12 @@ fn priority(m: &Memory, now: chrono::DateTime<Utc>) -> f32 {
 fn retention(age_days: f32, access_count: i64, importance: f32) -> f32 {
     let stability = 1.0 + 0.5 * access_count.max(0) as f32 + 2.0 * importance.clamp(0.0, 1.0);
     (-age_days.max(0.0) / (5.0 * stability)).exp()
+}
+
+/// Agentmemory's reinforcement curve: each successful recall nudges confidence toward 1.0 with
+/// diminishing returns. Pure function so it's easy to unit-test against the spec.
+pub fn reinforce(c: f32) -> f32 {
+    (c + 0.1 * (1.0 - c)).clamp(0.0, 1.0)
 }
 
 /// How many semantic candidates to pull from the vector index when fusing (>= the recall limit).
@@ -396,5 +574,167 @@ mod tests {
             mem.get(&fact.id).unwrap().unwrap().tier,
             MemoryTier::Semantic
         );
+    }
+
+    // ---- v0.5.0 Sprint 2: confidence + edit/delete/pin -------------------------------------
+
+    #[test]
+    fn reinforce_curve_matches_agentmemory_formula() {
+        // Test the spec'd curve across 20 synthetic inputs.
+        let inputs: Vec<f32> = (0..20).map(|i| i as f32 / 20.0).collect();
+        for c in inputs {
+            let next = reinforce(c);
+            let expected = (c + 0.1 * (1.0 - c)).clamp(0.0, 1.0);
+            assert!(
+                (next - expected).abs() < 1e-6,
+                "reinforce({c}) = {next}, expected {expected}"
+            );
+            // Monotone non-decreasing: every recall nudges confidence up.
+            assert!(next >= c, "reinforce must never decrease confidence; got {next} < {c}");
+            // Capped at 1.0.
+            assert!(next <= 1.0);
+        }
+        // Fixed-point: reinforce(1.0) == 1.0.
+        assert_eq!(reinforce(1.0), 1.0);
+        // First bump from neutral (0.5) gives 0.55.
+        assert!((reinforce(0.5) - 0.55).abs() < 1e-6);
+    }
+
+    #[test]
+    fn recall_reinforces_returned_memories() {
+        let Some(mem) = engine() else { return };
+        let m = mem
+            .remember(NewMemory::new("recall reinforcement target"))
+            .unwrap();
+        // Initial confidence = 0.5.
+        assert!((mem.get(&m.id).unwrap().unwrap().confidence - 0.5).abs() < 1e-6);
+        mem.recall("recall reinforcement", 5).unwrap();
+        let after = mem.get(&m.id).unwrap().unwrap();
+        assert!(
+            after.confidence > 0.5,
+            "confidence should have increased after a recall hit; got {}",
+            after.confidence
+        );
+        assert!(after.access_count >= 1);
+    }
+
+    #[test]
+    fn edit_memory_updates_only_specified_fields() {
+        let Some(mem) = engine() else { return };
+        let m = mem
+            .remember(NewMemory::new("original content"))
+            .unwrap();
+        let updated = mem
+            .edit(&m.id, Some("new content".into()), None, None, None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(updated.content, "new content");
+        // Importance was 0.5 at creation; edit didn't touch it.
+        assert!((updated.importance - 0.5).abs() < 1e-6);
+
+        // Unknown id returns Ok(None).
+        assert!(mem.edit("no-such-id", None, None, None, None).unwrap().is_none());
+    }
+
+    #[test]
+    fn delete_memory_removes_it() {
+        let Some(mem) = engine() else { return };
+        let m = mem
+            .remember(NewMemory::new("to be deleted"))
+            .unwrap();
+        assert!(mem.delete(&m.id).unwrap());
+        assert!(mem.get(&m.id).unwrap().is_none());
+        // Second delete is a no-op.
+        assert!(!mem.delete(&m.id).unwrap());
+    }
+
+    #[test]
+    fn pin_keeps_a_memory_at_the_top_of_wakeup() {
+        let Some(mem) = engine() else { return };
+        // A high-importance decision (would normally top wakeup).
+        let important = mem
+            .remember(NewMemory {
+                content: "an important decision".into(),
+                kind: Some(MemoryKind::Decision),
+                importance: Some(0.95),
+                ..Default::default()
+            })
+            .unwrap();
+        // A low-importance note that we'll pin.
+        let pinned = mem
+            .remember(NewMemory::new("a pinned note that should rise"))
+            .unwrap();
+        mem.pin(&pinned.id, true).unwrap();
+
+        let w = mem.wakeup(10).unwrap();
+        assert_eq!(w[0].id, pinned.id, "pinned should be first in wakeup");
+        // Important decision should still be present, just not first.
+        assert!(w.iter().any(|x| x.id == important.id));
+    }
+
+    // ---- v0.5.0 Sprint 3: crystallize + memory graph ---------------------------------------
+
+    #[test]
+    fn crystallize_promotes_working_into_a_crystal_with_derived_from_edges() {
+        let Some(mem) = engine() else { return };
+        let a = mem
+            .remember(NewMemory::new("first working note"))
+            .unwrap();
+        let b = mem
+            .remember(NewMemory::new("second working note"))
+            .unwrap();
+        // A non-working memory should NOT be picked up.
+        let mut fact = NewMemory::new("a fact that should not be crystallized");
+        fact.tier = Some(MemoryTier::Semantic);
+        let fact_id = mem.remember(fact).unwrap().id;
+
+        let crystal_id = mem.crystallize(None).unwrap().expect("crystal");
+        let crystal = mem.get(&crystal_id).unwrap().unwrap();
+        assert_eq!(crystal.tier, MemoryTier::Semantic);
+        assert!(crystal.derived_from.contains(&a.id));
+        assert!(crystal.derived_from.contains(&b.id));
+
+        // Inputs now carry a `supersedes` edge to the crystal and have been moved to episodic.
+        let a_after = mem.get(&a.id).unwrap().unwrap();
+        let b_after = mem.get(&b.id).unwrap().unwrap();
+        assert!(a_after.supersedes.contains(&crystal_id));
+        assert_eq!(a_after.tier, MemoryTier::Episodic);
+        assert!(b_after.supersedes.contains(&crystal_id));
+
+        // The pre-existing semantic fact is untouched.
+        assert_eq!(mem.get(&fact_id).unwrap().unwrap().tier, MemoryTier::Semantic);
+
+        // A second crystallize with no fresh working memories is a no-op.
+        assert!(mem.crystallize(None).unwrap().is_none());
+    }
+
+    #[test]
+    fn memory_graph_includes_derived_edges_for_crystallized_set() {
+        let Some(mem) = engine() else { return };
+        let a = mem.remember(NewMemory::new("graph input 1")).unwrap();
+        let b = mem.remember(NewMemory::new("graph input 2")).unwrap();
+        let crystal_id = mem.crystallize(None).unwrap().unwrap();
+
+        let g = mem.graph().unwrap();
+        // 3 nodes: the two inputs + the crystal.
+        assert_eq!(g.nodes.len(), 3);
+        // The crystal has derived_from edges to both inputs.
+        let derived_count = g
+            .edges
+            .iter()
+            .filter(|e| e.source == crystal_id && e.kind == "derived_from")
+            .count();
+        assert_eq!(derived_count, 2);
+        // Each input has a supersedes edge to the crystal.
+        assert!(g
+            .edges
+            .iter()
+            .any(|e| e.source == a.id && e.target == crystal_id && e.kind == "supersedes"));
+        assert!(g
+            .edges
+            .iter()
+            .any(|e| e.source == b.id && e.target == crystal_id && e.kind == "supersedes"));
+        // b is still in node list (synthesized inputs).
+        assert!(g.nodes.iter().any(|n| n.id == b.id));
     }
 }

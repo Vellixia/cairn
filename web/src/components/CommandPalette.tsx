@@ -22,12 +22,14 @@ import {
   Activity,
   Target,
   History,
+  Network,
   ShieldCheck,
   Package,
   Users,
   KeyRound,
   UserPlus,
   FileClock,
+  UserCircle,
 } from "lucide-react";
 import { useUIStore } from "@/lib/stores/ui";
 
@@ -36,7 +38,7 @@ interface Item {
   label: string;
   hint?: string;
   shortcut?: string;
-  group: "Navigate" | "Memory" | "Reliability" | "Devices" | "Share";
+  group: "Navigate" | "Memory" | "Reliability" | "Devices" | "Share" | "Personalization";
   icon: React.ComponentType<{ className?: string }>;
   action: () => void;
 }
@@ -69,6 +71,7 @@ export function CommandPalette() {
     { id: "nav-mem", label: "Memories · Remember", group: "Navigate", icon: Brain, action: nav("/dashboard/memory") },
     { id: "nav-recall", label: "Memories · Recall", group: "Navigate", icon: Search, action: nav("/dashboard/memory/recall") },
     { id: "nav-wakeup", label: "Memories · Wakeup", group: "Navigate", icon: Sparkles, action: nav("/dashboard/memory/wakeup") },
+    { id: "nav-graph", label: "Memories · Graph", group: "Navigate", icon: Network, action: nav("/dashboard/memory/graph") },
     { id: "nav-ctx", label: "Context · Inspector", group: "Navigate", icon: FileSearch, action: nav("/dashboard/context") },
     { id: "nav-asm", label: "Context · Assemble", group: "Navigate", icon: Layers, action: nav("/dashboard/context/assemble") },
     { id: "nav-rel", label: "Reliability · Score", group: "Navigate", icon: Activity, action: nav("/dashboard/reliability") },
@@ -85,6 +88,8 @@ export function CommandPalette() {
     { id: "act-cp", label: "Create a checkpoint", hint: "jump to Checkpoints", group: "Reliability", icon: History, action: nav("/dashboard/reliability/checkpoints") },
     { id: "act-issue", label: "Issue a device token", hint: "jump to Tokens", group: "Devices", icon: KeyRound, action: nav("/dashboard/devices") },
     { id: "act-san", label: "Sanitize text", hint: "jump to Sanitize", group: "Share", icon: ShieldCheck, action: nav("/dashboard/share/sanitize") },
+    { id: "nav-profile", label: "Profile", group: "Personalization", icon: UserCircle, action: nav("/dashboard/profile") },
+    { id: "act-prefer", label: "Add a preference", hint: "jump to Profile", group: "Personalization", icon: UserCircle, action: nav("/dashboard/profile") },
   ];
 
   return (
@@ -92,7 +97,7 @@ export function CommandPalette() {
       <CommandInput placeholder="Jump to a section, run an action…" />
       <CommandList>
         <CommandEmpty>No matches. Try a section name like "memory" or "tokens".</CommandEmpty>
-        {(["Navigate", "Memory", "Reliability", "Devices", "Share"] as const).map((group) => {
+        {(["Navigate", "Memory", "Reliability", "Devices", "Share", "Personalization"] as const).map((group) => {
           const filtered = items.filter((i) => i.group === group);
           if (filtered.length === 0) return null;
           return (

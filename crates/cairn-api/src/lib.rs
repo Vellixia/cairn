@@ -7,15 +7,20 @@
 mod admin;
 mod auth;
 mod devices;
+mod events;
+mod metrics;
 mod security_headers;
 mod session;
 mod ui;
 
 pub use admin::ADMIN_META_KEY;
+pub use events::{EventBroker, EventPayload};
 
 use crate::admin::{self as admin_mod, auth_status, list_audit, login, logout, me, setup};
 use crate::auth::{extract_bearer, TokenInfo, TokenSigner};
 use crate::devices::{create_pair_code, create_token, list_tokens, revoke_token};
+use crate::events::events as sse_events;
+use crate::metrics::{self as metrics_mod, metrics as metrics_endpoint, SavingsState};
 use crate::session::{extract_cookie as extract_session_cookie, SessionSigner};
 use axum::{
     extract::{Query, Request, State},
@@ -62,6 +67,13 @@ pub struct AppState {
     pub cors_origins: Vec<String>,
     pub session_signer: Option<Arc<SessionSigner>>,
     pub audit_log: Arc<admin::AuditLog>,
+    /// SSE event broker (v0.5.0 Sprint 1) — publish from mutating handlers, subscribe from
+    /// `/api/events`.
+    pub events: EventBroker,
+    /// Live cost-savings counter (v0.5.0 Sprint 1) — instrumented handlers bump it.
+    pub savings: SavingsState,
+    /// Server-start timestamp (seconds since epoch) used by the metrics endpoint.
+    pub started_at: i64,
     signer: Option<Arc<TokenSigner>>,
 }
 
@@ -102,6 +114,9 @@ impl AppState {
             cors_origins: cfg.cors_origins.clone(),
             session_signer,
             audit_log: Arc::new(admin::AuditLog::default()),
+            events: EventBroker::default(),
+            savings: SavingsState::default(),
+            started_at: metrics_mod::server_started(),
             signer,
         })
     }
@@ -139,6 +154,8 @@ pub fn router(state: AppState) -> Router {
     let cors = build_cors(&state.cors_origins);
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/events", get(sse_events))
+        .route("/api/metrics", get(metrics_endpoint))
         .route("/api/stats", get(stats))
         .route("/api/context/read", get(read))
         .route("/api/context/expand", get(expand))
@@ -147,6 +164,11 @@ pub fn router(state: AppState) -> Router {
         .route("/api/memory/recall", get(recall))
         .route("/api/memory/wakeup", get(wakeup))
         .route("/api/memory/consolidate", post(consolidate_memory))
+        .route("/api/memory/:id", post(edit_memory).delete(delete_memory))
+        .route("/api/memory/:id/pin", post(pin_memory))
+        .route("/api/memory/:id/reinforce", post(reinforce_memory))
+        .route("/api/memory/crystallize", post(crystallize))
+        .route("/api/memory/graph", get(memory_graph))
         .route("/api/guard/verify", post(verify))
         .route("/api/guard/anchor", get(get_anchor).post(post_anchor))
         .route("/api/guard/checkpoint", post(create_checkpoint))
@@ -440,6 +462,112 @@ async fn wakeup(
 
 async fn consolidate_memory(State(s): State<AppState>) -> Result<Json<Value>, ApiError> {
     Ok(Json(json!({ "promoted": s.mem.consolidate()? })))
+}
+
+#[derive(Deserialize)]
+struct MemoryEditBody {
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    importance: Option<f32>,
+    #[serde(default)]
+    concepts: Option<Vec<String>>,
+    #[serde(default)]
+    files: Option<Vec<String>>,
+}
+
+/// POST `/api/memory/:id` — edit a memory's mutable fields. Any field omitted from the body is
+/// left unchanged. The suspicious-content scan re-runs on the new content (defense-in-depth).
+async fn edit_memory(
+    State(s): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(body): Json<MemoryEditBody>,
+) -> Result<Json<Memory>, ApiError> {
+    let content = body
+        .content
+        .map(|c| cairn_profile::strip_preference_blocks(&c));
+    match s
+        .mem
+        .edit(&id, content, body.importance, body.concepts, body.files)?
+    {
+        Some(m) => {
+            crate::events::publish_memory(&s.events, "edited", &m.id);
+            Ok(Json(m))
+        }
+        None => Err(ApiError(StatusCode::NOT_FOUND, "no such memory".into())),
+    }
+}
+
+/// DELETE `/api/memory/:id` — remove a memory by id.
+async fn delete_memory(
+    State(s): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    if s.mem.delete(&id)? {
+        crate::events::publish_memory(&s.events, "deleted", &id);
+        Ok(Json(json!({ "deleted": true })))
+    } else {
+        Err(ApiError(StatusCode::NOT_FOUND, "no such memory".into()))
+    }
+}
+
+#[derive(Deserialize)]
+struct PinBody {
+    pinned: bool,
+}
+
+/// POST `/api/memory/:id/pin` — pin or unpin a memory.
+async fn pin_memory(
+    State(s): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Json(body): Json<PinBody>,
+) -> Result<Json<Memory>, ApiError> {
+    if s.mem.pin(&id, body.pinned)? {
+        crate::events::publish_memory(&s.events, if body.pinned { "pinned" } else { "unpinned" }, &id);
+        Ok(Json(s.mem.get(&id)?.unwrap()))
+    } else {
+        Err(ApiError(StatusCode::NOT_FOUND, "no such memory".into()))
+    }
+}
+
+/// POST `/api/memory/:id/reinforce` — manually nudge a memory's confidence (e.g. after a
+/// `confirm_useful` click in the dashboard). Returns the updated memory.
+async fn reinforce_memory(
+    State(s): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<Memory>, ApiError> {
+    s.store.reinforce_memory(&id)?;
+    match s.mem.get(&id)? {
+        Some(m) => Ok(Json(m)),
+        None => Err(ApiError(StatusCode::NOT_FOUND, "no such memory".into())),
+    }
+}
+
+#[derive(Deserialize)]
+struct CrystallizeBody {
+    #[serde(default)]
+    session_id: Option<String>,
+}
+
+/// POST `/api/memory/crystallize` — promote working-tier memories into a semantic crystal.
+async fn crystallize(
+    State(s): State<AppState>,
+    Json(body): Json<CrystallizeBody>,
+) -> Result<Json<Value>, ApiError> {
+    match s.mem.crystallize(body.session_id.as_deref())? {
+        Some(id) => {
+            crate::events::publish_memory(&s.events, "crystallized", &id);
+            Ok(Json(json!({ "crystallized": true, "crystal_id": id })))
+        }
+        None => Ok(Json(json!({ "crystallized": false }))),
+    }
+}
+
+/// GET `/api/memory/graph` — the provenance graph (nodes + edges) for the dashboard.
+async fn memory_graph(
+    State(s): State<AppState>,
+) -> Result<Json<cairn_memory::MemoryGraph>, ApiError> {
+    Ok(Json(s.mem.graph()?))
 }
 
 #[derive(Deserialize)]
@@ -1251,5 +1379,278 @@ mod tests {
             !dbg.contains("Any"),
             "empty origin list must not produce a permissive layer; got: {dbg}"
         );
+    }
+
+    // ---- v0.5.0 Sprint 1: SSE event broker + metrics endpoint -----------------------------
+
+    #[test]
+    fn event_broker_delivers_published_payloads_to_subscribers() {
+        let broker = crate::events::EventBroker::default();
+        let mut rx = broker.subscribe();
+        broker.publish(crate::events::EventPayload {
+            id: "test-1".into(),
+            kind: crate::events::KIND_STATS,
+            ts: 12345,
+            data: serde_json::json!({"hello": "world"}),
+        });
+        // Subscription is async, so poll for up to 500 ms.
+        let start = std::time::Instant::now();
+        loop {
+            match rx.try_recv() {
+                Ok(ev) => {
+                    assert_eq!(ev.id, "test-1");
+                    assert_eq!(ev.kind, crate::events::KIND_STATS);
+                    assert_eq!(ev.ts, 12345);
+                    assert_eq!(ev.data["hello"], "world");
+                    return;
+                }
+                Err(tokio::sync::broadcast::error::TryRecvError::Empty) => {
+                    if start.elapsed() > std::time::Duration::from_millis(500) {
+                        panic!("subscriber never received published event");
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(e) => panic!("unexpected recv error: {e}"),
+            }
+        }
+    }
+
+    #[test]
+    fn savings_counter_records_reads_and_computes_ratios() {
+        let counter = crate::metrics::SavingsCounter::default();
+        counter.record_read(200, 1000, false);
+        counter.record_read(0, 100, true);
+        let snap = counter.snapshot();
+        assert_eq!(snap.compact_bytes, 200);
+        assert_eq!(snap.full_bytes, 1100);
+        assert_eq!(snap.saved_bytes, 900);
+        assert!((snap.hit_rate - 0.5).abs() < 1e-9);
+        assert!((snap.bounce_rate - 0.5).abs() < 1e-9);
+        assert!(snap.usd_saved() > 0.0);
+    }
+
+    #[tokio::test]
+    async fn sse_endpoint_serves_a_first_event_under_500ms() {
+        let Some((state, _dir)) = test_state() else {
+            return;
+        };
+        // Start the SSE handler — it returns immediately with a 200 + `text/event-stream`.
+        let started = std::time::Instant::now();
+        let resp = sse_events(
+            State(state.clone()),
+            axum::extract::Query(crate::events::EventsQuery::default()),
+            axum::http::HeaderMap::new(),
+        )
+        .await
+        .into_response();
+        assert!(
+            started.elapsed() < std::time::Duration::from_millis(500),
+            "SSE handler should return in <500ms; took {:?}",
+            started.elapsed()
+        );
+        // axum's Sse wraps the body; we just verify it's a streaming Content-Type.
+        let ct = resp
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(
+            ct.starts_with("text/event-stream"),
+            "SSE response should have text/event-stream content-type; got {ct:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn metrics_endpoint_returns_json_with_savings_block() {
+        let Some((state, _dir)) = test_state() else {
+            return;
+        };
+        // Make sure there's a memory so `memories` isn't trivially zero.
+        state
+            .mem
+            .remember(cairn_core::NewMemory::new("sprint1 metric test"))
+            .unwrap();
+        state.savings.record_read(500, 2000, false);
+
+        let resp = metrics_endpoint(State(state.clone())).await.unwrap();
+        let v = resp.0;
+        assert!(v.savings.saved_bytes >= 1500);
+        assert!(v.memories >= 1);
+        assert!(v.usd_saved >= 0.0);
+        assert!(v.server["version"].is_string());
+    }
+
+    #[tokio::test]
+    async fn sse_backfill_replays_audit_events_with_since_id() {
+        let Some((state, _dir)) = test_state() else {
+            return;
+        };
+        // Record three audit events via the durable path.
+        let id1 = state
+            .store
+            .append_audit(100, "login_ok", "alice", "")
+            .unwrap();
+        state
+            .store
+            .append_audit(200, "token_issued", "alice", "laptop")
+            .unwrap();
+        state
+            .store
+            .append_audit(300, "login_failed", "bob", "bad")
+            .unwrap();
+
+        // Since the first id, only the latter two should come back, in chronological order.
+        let backfilled = crate::events::test_backfill(&state, Some(&id1)).unwrap();
+        assert_eq!(backfilled.len(), 2);
+        assert_eq!(backfilled[0].kind, crate::events::KIND_AUDIT);
+        assert_eq!(backfilled[0].data["kind"], "token_issued");
+        assert_eq!(backfilled[1].data["kind"], "login_failed");
+    }
+
+    // ---- v0.5.0 Sprint 2: memory CRUD + confidence + pin ---------------------------------
+
+    #[tokio::test]
+    async fn memory_edit_delete_pin_round_trip() {
+        let Some((state, _dir)) = test_state() else {
+            return;
+        };
+        let m = state
+            .mem
+            .remember(cairn_core::NewMemory::new("sprint2 round trip"))
+            .unwrap();
+
+        // Edit: content + importance change, concepts/files left alone.
+        let body = MemoryEditBody {
+            content: Some("sprint2 round trip EDITED".into()),
+            importance: Some(0.9),
+            concepts: None,
+            files: None,
+        };
+        let edited = edit_memory(
+            State(state.clone()),
+            axum::extract::Path(m.id.clone()),
+            Json(body),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(edited.content, "sprint2 round trip EDITED");
+        assert!((edited.importance - 0.9).abs() < 1e-6);
+
+        // Pin: wakeup ordering reflects it.
+        pin_memory(
+            State(state.clone()),
+            axum::extract::Path(m.id.clone()),
+            Json(PinBody { pinned: true }),
+        )
+        .await
+        .unwrap();
+
+        // Delete: 404 on second attempt, GET get returns None.
+        let ok = delete_memory(State(state.clone()), axum::extract::Path(m.id.clone()))
+            .await
+            .unwrap();
+        assert_eq!(ok.0["deleted"], serde_json::json!(true));
+        assert!(state.mem.get(&m.id).unwrap().is_none());
+
+        let err = delete_memory(State(state.clone()), axum::extract::Path(m.id))
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn memory_reinforce_endpoint_advances_confidence() {
+        let Some((state, _dir)) = test_state() else {
+            return;
+        };
+        let m = state
+            .mem
+            .remember(cairn_core::NewMemory::new("reinforce endpoint target"))
+            .unwrap();
+        let start = m.confidence;
+        let updated = reinforce_memory(State(state.clone()), axum::extract::Path(m.id.clone()))
+            .await
+            .unwrap()
+            .0;
+        assert!(updated.confidence > start, "reinforce should bump confidence");
+    }
+
+    #[tokio::test]
+    async fn new_memory_default_confidence_is_half() {
+        let Some((state, _dir)) = test_state() else {
+            return;
+        };
+        let m = state
+            .mem
+            .remember(cairn_core::NewMemory::new("default confidence check"))
+            .unwrap();
+        assert!((m.confidence - 0.5).abs() < 1e-6);
+        assert!(!m.pinned);
+    }
+
+    // ---- v0.5.0 Sprint 3: crystallize + memory graph endpoints ----------------------------
+
+    #[tokio::test]
+    async fn memory_crystallize_endpoint_promotes_working_and_publishes_event() {
+        let Some((state, _dir)) = test_state() else {
+            return;
+        };
+        state
+            .mem
+            .remember(cairn_core::NewMemory::new("working note A"))
+            .unwrap();
+        state
+            .mem
+            .remember(cairn_core::NewMemory::new("working note B"))
+            .unwrap();
+
+        let resp = crystallize(
+            State(state.clone()),
+            Json(CrystallizeBody { session_id: None }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(resp["crystallized"], serde_json::json!(true));
+        assert!(resp["crystal_id"].is_string());
+
+        // A second call with no fresh working memories returns crystallized: false.
+        let second = crystallize(
+            State(state.clone()),
+            Json(CrystallizeBody { session_id: None }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(second["crystallized"], serde_json::json!(false));
+    }
+
+    #[tokio::test]
+    async fn memory_graph_endpoint_returns_nodes_and_edges() {
+        let Some((state, _dir)) = test_state() else {
+            return;
+        };
+        state
+            .mem
+            .remember(cairn_core::NewMemory::new("graph node 1"))
+            .unwrap();
+        state
+            .mem
+            .remember(cairn_core::NewMemory::new("graph node 2"))
+            .unwrap();
+        // Crystallize so derived_from / supersedes edges appear.
+        state.mem.crystallize(None).unwrap();
+
+        let resp = memory_graph(State(state.clone())).await.unwrap();
+        let v = resp.0;
+        assert_eq!(v.nodes.len(), 3, "two inputs + one crystal");
+        let derived_count = v
+            .edges
+            .iter()
+            .filter(|e| e.kind == "derived_from")
+            .count();
+        assert!(derived_count >= 2, "crystal should have derived_from edges to both inputs");
     }
 }

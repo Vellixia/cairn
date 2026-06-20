@@ -13,12 +13,14 @@ import {
   Activity,
   Target,
   History,
+  Network,
   ShieldCheck,
   Package,
   Users,
   KeyRound,
   UserPlus,
   FileClock,
+  UserCircle,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -52,6 +54,7 @@ const SECTIONS: Section[] = [
       { href: "/dashboard/memory", label: "Memories", icon: Brain },
       { href: "/dashboard/memory/recall", label: "Recall", icon: Search },
       { href: "/dashboard/memory/wakeup", label: "Wakeup", icon: Sparkles },
+      { href: "/dashboard/memory/graph", label: "Graph", icon: Network },
     ],
   },
   {
@@ -75,6 +78,12 @@ const SECTIONS: Section[] = [
       { href: "/dashboard/share/sanitize", label: "Sanitize", icon: ShieldCheck },
       { href: "/dashboard/share/export", label: "Bundles", icon: Package },
       { href: "/dashboard/pool", label: "Pool", icon: Users },
+    ],
+  },
+  {
+    title: "Personalization",
+    items: [
+      { href: "/dashboard/profile", label: "Profile", icon: UserCircle },
     ],
   },
   {

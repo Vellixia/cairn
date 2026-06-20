@@ -101,8 +101,58 @@ pub struct Memory {
     pub access_count: i64,
     #[serde(default)]
     pub suspicious: bool,
+    /// Confidence score `[0.0, 1.0]` — evolves over time via the agentmemory reinforcement
+    /// curve `c' = min(1.0, c + 0.1*(1.0 - c))` on each successful `recall` hit. Defaults to 0.5
+    /// for new memories (neutral).
+    #[serde(default = "default_confidence")]
+    pub confidence: f32,
+    /// Pinned memories are kept around even when their confidence decays — they bypass the
+    /// "candidate for review" cutoff so the user can keep a memory they've explicitly marked
+    /// important. Defaults to false.
+    #[serde(default)]
+    pub pinned: bool,
+    // ---- v0.5.0 Sprint 3: provenance edges -------------------------------------------------
+    /// Edges to memory ids this one was derived from (crystallized from, summarized, combined).
+    #[serde(default)]
+    pub derived_from: Vec<String>,
+    /// Edges to memory ids this one contradicts (used to surface "these two memories disagree").
+    #[serde(default)]
+    pub contradicts: Vec<String>,
+    /// Edges to memory ids this one supersedes (newer replaces older).
+    #[serde(default)]
+    pub supersedes: Vec<String>,
+    /// Edges to file paths / symbols / projects this memory applies to (code-graph-style relevance).
+    #[serde(default)]
+    pub applies_to: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Typed provenance edge between memories (or memory → file/symbol/project).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeKind {
+    DerivedFrom,
+    Contradicts,
+    Supersedes,
+    AppliesTo,
+}
+
+impl EdgeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EdgeKind::DerivedFrom => "derived_from",
+            EdgeKind::Contradicts => "contradicts",
+            EdgeKind::Supersedes => "supersedes",
+            EdgeKind::AppliesTo => "applies_to",
+        }
+    }
+}
+
+/// Default confidence for a brand-new memory. The agentmemory project's reinforcement curve
+/// starts from a neutral midpoint so neither new memories nor old ones bias the recall mix.
+fn default_confidence() -> f32 {
+    0.5
 }
 
 /// Input for creating a memory. Optional fields fall back to sensible defaults.
@@ -123,6 +173,21 @@ pub struct NewMemory {
     pub importance: Option<f32>,
     #[serde(default)]
     pub suspicious: Option<bool>,
+    #[serde(default)]
+    pub confidence: Option<f32>,
+    #[serde(default)]
+    pub pinned: Option<bool>,
+    // v0.5.0 Sprint 3: optional edge inputs so callers can create a memory already wired
+    // into the provenance graph (e.g. a crystallization step that knows which memories it's
+    // summarizing).
+    #[serde(default)]
+    pub derived_from: Vec<String>,
+    #[serde(default)]
+    pub contradicts: Vec<String>,
+    #[serde(default)]
+    pub supersedes: Vec<String>,
+    #[serde(default)]
+    pub applies_to: Vec<String>,
 }
 
 impl NewMemory {
@@ -147,6 +212,12 @@ impl NewMemory {
             importance: self.importance.unwrap_or(0.5).clamp(0.0, 1.0),
             access_count: 0,
             suspicious: self.suspicious.unwrap_or(false),
+            confidence: self.confidence.unwrap_or(0.5).clamp(0.0, 1.0),
+            pinned: self.pinned.unwrap_or(false),
+            derived_from: self.derived_from,
+            contradicts: self.contradicts,
+            supersedes: self.supersedes,
+            applies_to: self.applies_to,
             created_at: now,
             updated_at: now,
         }

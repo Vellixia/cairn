@@ -39,16 +39,33 @@ pub struct AuditLog {
 }
 
 impl AuditLog {
-    pub fn record(&self, kind: &str, actor: &str, detail: String) {
-        let mut q = self.inner.lock().expect("audit log mutex");
-        q.push_front(AuditEvent {
-            ts: Utc::now().timestamp(),
-            kind: kind.to_string(),
-            actor: actor.to_string(),
-            detail,
-        });
-        while q.len() > AUDIT_CAPACITY {
-            q.pop_back();
+    /// Record an audit event in both the in-memory ring buffer and durable store. The in-memory
+    /// ring keeps the last `AUDIT_CAPACITY` events hot for `/api/devices/audit`; the durable
+    /// store is what survives restart and what the SSE stream reads from for `Last-Event-ID`
+    /// replay. We never let a write to one block the other — best-effort durable write that
+    /// fails (e.g. backend transiently unreachable) is logged but doesn't lose the in-memory
+    /// event the admin is currently looking at.
+    pub fn record(&self, store: &cairn_store::Store, kind: &str, actor: &str, detail: String) {
+        let ts = Utc::now().timestamp();
+        {
+            let mut q = self.inner.lock().expect("audit log mutex");
+            q.push_front(AuditEvent {
+                ts,
+                kind: kind.to_string(),
+                actor: actor.to_string(),
+                detail: detail.clone(),
+            });
+            while q.len() > AUDIT_CAPACITY {
+                q.pop_back();
+            }
+        }
+        match store.append_audit(ts, kind, actor, &detail) {
+            Ok(id) => {
+                tracing::trace!(event_id = %id, kind, actor, "audit persisted");
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, kind, actor, "audit durable write failed");
+            }
         }
     }
 
@@ -179,6 +196,7 @@ pub async fn login(State(state): State<AppState>, Json(req): Json<LoginRequest>)
         Ok(Some(r)) => r,
         Ok(None) => {
             state.audit_log.record(
+                &state.store,
                 "login_failed",
                 &req.username,
                 "no admin configured".to_string(),
@@ -193,6 +211,7 @@ pub async fn login(State(state): State<AppState>, Json(req): Json<LoginRequest>)
     };
     if rec.username != req.username {
         state.audit_log.record(
+            &state.store,
             "login_failed",
             &req.username,
             "username mismatch".to_string(),
@@ -210,7 +229,7 @@ pub async fn login(State(state): State<AppState>, Json(req): Json<LoginRequest>)
     if !ok {
         state
             .audit_log
-            .record("login_failed", &req.username, "bad password".to_string());
+            .record(&state.store, "login_failed", &req.username, "bad password".to_string());
         return (
             StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({"error": "invalid credentials"})),
@@ -220,7 +239,7 @@ pub async fn login(State(state): State<AppState>, Json(req): Json<LoginRequest>)
     // Success.
     state
         .audit_log
-        .record("login_ok", &rec.username, String::new());
+        .record(&state.store, "login_ok", &rec.username, String::new());
     let payload = mint_session(&state, &rec);
     let Some(signer) = state.session_signer.as_ref() else {
         return error_response("CAIRN_SECRET_KEY is required for cookie sessions");
@@ -343,7 +362,7 @@ pub async fn setup(State(state): State<AppState>, Json(req): Json<SetupRequest>)
     }
     state
         .audit_log
-        .record("setup", &rec.username, String::new());
+        .record(&state.store, "setup", &rec.username, String::new());
     let payload = mint_session(&state, &rec);
     let Some(signer) = state.session_signer.as_ref() else {
         return error_response("CAIRN_SECRET_KEY is required for cookie sessions");
@@ -413,13 +432,31 @@ mod tests {
     fn audit_log_caps_at_capacity() {
         let log = AuditLog::default();
         for i in 0..(AUDIT_CAPACITY + 5) {
-            log.record("evt", "admin", format!("{i}").to_string());
+            log.record_dummy(format!("{i}"));
         }
         let snap = log.snapshot();
         assert_eq!(snap.len(), AUDIT_CAPACITY);
         // Newest first.
         assert!(snap[0].detail.contains(&(AUDIT_CAPACITY + 4).to_string()));
         assert!(snap.last().unwrap().detail.contains("5"));
+    }
+
+    /// A helper for tests that don't care about durable persistence — the production `record`
+    /// writes to the store, but tests run with `cairn_store::Store` and that requires a live
+    /// HelixDB. Tests want to assert in-memory ring behavior, so they use this stub.
+    impl AuditLog {
+        pub fn record_dummy(&self, detail: String) {
+            let mut q = self.inner.lock().expect("audit log mutex");
+            q.push_front(AuditEvent {
+                ts: Utc::now().timestamp(),
+                kind: "test".into(),
+                actor: "tester".into(),
+                detail,
+            });
+            while q.len() > AUDIT_CAPACITY {
+                q.pop_back();
+            }
+        }
     }
 
     #[test]

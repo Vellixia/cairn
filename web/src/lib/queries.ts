@@ -213,6 +213,80 @@ export function useRememberMutation() {
   });
 }
 
+export function useEditMemoryMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Pick<Memory, "content" | "importance" | "concepts" | "files">> }) =>
+      postJSON<Memory>(`/api/memory/${encodeURIComponent(id)}`, patch),
+    onSuccess: (m) => {
+      qc.invalidateQueries({ queryKey: ["memory"] });
+      qc.invalidateQueries({ queryKey: qk.stats });
+      toast.success(`edited ${m.id.slice(0, 8)}`);
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
+}
+
+export function useDeleteMemoryMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      delJSON<{ deleted: boolean }>(`/api/memory/${encodeURIComponent(id)}`),
+    onSuccess: (_r, id) => {
+      qc.invalidateQueries({ queryKey: ["memory"] });
+      qc.invalidateQueries({ queryKey: qk.stats });
+      toast(`Deleted ${id.slice(0, 8)}`);
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
+}
+
+export function usePinMemoryMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) =>
+      postJSON<Memory>(`/api/memory/${encodeURIComponent(id)}/pin`, { pinned }),
+    onSuccess: (m) => {
+      qc.invalidateQueries({ queryKey: ["memory"] });
+      toast.success(`${m.pinned ? "Pinned" : "Unpinned"} ${m.id.slice(0, 8)}`);
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
+}
+
+export function useReinforceMemoryMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      postJSON<Memory>(`/api/memory/${encodeURIComponent(id)}/reinforce`, {}),
+    onSuccess: (m) => {
+      qc.invalidateQueries({ queryKey: ["memory"] });
+      toast.success(`Reinforced · confidence ${m.confidence.toFixed(2)}`);
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
+}
+
+export function useCrystallizeMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { session_id?: string } = {}) =>
+      postJSON<{ crystallized: boolean; crystal_id?: string }>(
+        "/api/memory/crystallize",
+        input,
+      ),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["memory"] });
+      if (r.crystallized) {
+        toast.success(`Crystallized · ${r.crystal_id?.slice(0, 8) ?? "—"}`);
+      } else {
+        toast("Nothing to crystallize (no working memories).");
+      }
+    },
+    onError: (e) => toast.error(errMessage(e)),
+  });
+}
+
 export function useSetAnchorMutation() {
   const qc = useQueryClient();
   return useMutation({

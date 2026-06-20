@@ -194,6 +194,10 @@ export interface Memory {
   files: string[];
   importance: number;
   access_count: number;
+  /** Confidence score [0.0, 1.0], evolves with reinforcement. Defaults to 0.5. */
+  confidence: number;
+  /** Pinned memories always surface first in wakeup regardless of score. */
+  pinned: boolean;
   created_at: string;
   updated_at: string;
 }

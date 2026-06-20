@@ -23,6 +23,11 @@ export const rememberSchema = z.object({
 });
 export type RememberInput = z.infer<typeof rememberSchema>;
 
+export const preferSchema = z.object({
+  rule: z.string().min(3, "Rule is too short."),
+});
+export type PreferInput = z.infer<typeof preferSchema>;
+
 export const anchorSchema = z.object({
   goal: z.string().min(1, "Goal cannot be empty."),
 });
