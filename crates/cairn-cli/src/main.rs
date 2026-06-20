@@ -4,6 +4,7 @@
 //! When `CAIRN_HELIX_URL` is set it talks to a local HelixDB; when `CAIRN_SERVER` is set it proxies
 //! through the remote Cairn HTTP API.
 
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -12,7 +13,9 @@ use cairn_core::{Config, NewMemory};
 use clap::{Parser, Subcommand};
 
 mod bench;
+mod doctor;
 mod hook;
+mod onboard;
 mod pair;
 mod pool;
 mod rules;
@@ -72,7 +75,24 @@ enum Cmd {
     /// Show basic stats.
     Stats,
     /// Verify the local setup.
-    Doctor,
+    Doctor {
+        /// Attempt to repair failures automatically (creates missing data dirs, etc.).
+        #[arg(long)]
+        fix: bool,
+    },
+    /// Zero-prompt setup for first-run installs: doctor + provision store + wire agents.
+    Onboard {
+        /// Skip agent auto-detection and wiring (useful for CI).
+        #[arg(long)]
+        skip_agents: bool,
+        /// Remote Cairn server URL — sets `CAIRN_SERVER` so the spawned `setup` subprocess
+        /// runs in remote-proxy mode.
+        #[arg(long)]
+        server: Option<String>,
+        /// Remote Cairn server token.
+        #[arg(long)]
+        token: Option<String>,
+    },
     /// Measure the token savings Cairn gives on a codebase.
     Bench { path: Option<PathBuf> },
     /// Pair this device with a Cairn server using a code from the host.
@@ -282,35 +302,23 @@ async fn main() -> anyhow::Result<()> {
             let s = State::open(&cfg)?;
             println!("memories: {}", s.store.count_memories()?);
         }
-        Cmd::Doctor => {
-            println!("cairn-cli doctor");
-            println!("  data dir     : {}", cfg.data_dir().display());
-            println!("  blobs        : {}", cfg.blobs_dir().display());
-            println!(
-                "  helix url    : {}",
-                cfg.helix_url
-                    .as_deref()
-                    .unwrap_or("(not set — CAIRN_HELIX_URL required)")
-            );
-            println!(
-                "  server       : {}",
-                cfg.default_server
-                    .as_deref()
-                    .unwrap_or("(not set — CAIRN_SERVER optional)")
-            );
-            println!("  embed        : {}", cfg.embed.provider);
-            match State::open(&cfg) {
-                Ok(s) => {
-                    let n = s.store.count_memories()?;
-                    println!("  helix        : ok");
-                    println!("  memories     : {n}");
-                    println!("cairn-cli doctor: ok");
-                }
-                Err(e) => {
-                    println!("  helix        : FAILED — {e}");
-                    anyhow::bail!("cairn-cli doctor: setup incomplete");
-                }
-            }
+        Cmd::Doctor { fix } => {
+            doctor::run_and_exit(doctor::DoctorOptions {
+                fix,
+                interactive: std::io::stdout().is_terminal(),
+            })?;
+        }
+        Cmd::Onboard {
+            skip_agents,
+            server,
+            token,
+        } => {
+            onboard::run(onboard::OnboardOptions {
+                skip_agents,
+                fix: true,
+                server,
+                token,
+            })?;
         }
         Cmd::Bench { path } => {
             let s = State::open(&cfg)?;
