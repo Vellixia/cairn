@@ -2245,7 +2245,8 @@ mod tests {
         // Registry is created at <data_dir>/registry; data_dir is the AppState's data_dir.
         let reg = state.registry.clone().expect("registry should be open");
         let kp = cairn_pack::Keypair::generate();
-        reg.add_trusted_key(kp.public()).unwrap();
+        reg.trust(kp.public(), cairn_registry::TrustScope::Public, None)
+            .unwrap();
 
         // Build a small signed tarball.
         let tar_path = dir.path().join("alpha.cairnpkg");
@@ -2360,5 +2361,107 @@ mod tests {
             serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
         assert_eq!(revs.len(), 1);
         assert_eq!(revs[0].name, "alpha");
+    }
+
+    /// Federation scope + provenance display (Sprint 14). Publishes a pack whose
+    /// manifest declares `scope: team` but only public-scope trusts are configured —
+    /// must be rejected with `ScopeDenied`. Then publishes with `scope: local` and
+    /// a public-scope grant — must succeed, and the cached manifest endpoint must
+    /// return a manifest that includes `stats.graph_edges` (Sprint 14c provenance
+    /// display).
+    #[tokio::test]
+    async fn registry_federation_scope_and_provenance_endpoints() {
+        use axum::body::{to_bytes, Body};
+        use axum::http::{Request as HttpRequest, StatusCode as AxStatus};
+        use cairn_pack::Pack;
+        use cairn_registry::TrustScope;
+        use tower::ServiceExt;
+
+        let Some((state, dir)) = test_state() else {
+            return;
+        };
+        let reg = state.registry.clone().expect("registry should be open");
+
+        // 1. team-scoped pack + public-only grant → rejected.
+        let team_pack_path = dir.path().join("team.cairnpkg");
+        let mut team_pack = Pack::new("team-only", "1.0.0");
+        team_pack.description = "scope: team — for the team".into();
+        team_pack
+            .memories
+            .push(serde_json::json!({"id": "m1", "content": "x"}));
+        let kp = cairn_pack::Keypair::generate();
+        reg.trust(kp.public(), TrustScope::Public, None).unwrap();
+        team_pack
+            .write_tarball_signed(&team_pack_path, &kp)
+            .unwrap();
+        let team_bytes = std::fs::read(&team_pack_path).unwrap();
+
+        let team_resp = reg.publish(&team_bytes, None);
+        match team_resp {
+            Err(cairn_registry::RegistryError::ScopeDenied {
+                pack_scope: TrustScope::Team,
+                ..
+            }) => {}
+            other => panic!("expected ScopeDenied for team pack, got {other:?}"),
+        }
+
+        // 2. local-scoped pack + public grant → accepted.
+        let local_pack_path = dir.path().join("local.cairnpkg");
+        let mut local_pack = Pack::new("local-notes", "1.0.0");
+        local_pack.description = "scope: local".into();
+        local_pack
+            .memories
+            .push(serde_json::json!({"id": "m1", "content": "alpha"}));
+        local_pack.graph_edges.push(serde_json::json!({
+            "src": "m1",
+            "dst": "src/foo.rs",
+            "kind": "applies_to",
+        }));
+        local_pack
+            .write_tarball_signed(&local_pack_path, &kp)
+            .unwrap();
+        let local_bytes = std::fs::read(&local_pack_path).unwrap();
+        let receipt = reg.publish(&local_bytes, None).unwrap();
+        assert_eq!(receipt.name, "local-notes");
+        assert_eq!(receipt.status, cairn_registry::PublishStatus::Signed);
+
+        // 3. The /registry/packs list must include the new pack with its scope
+        // and provenance_edge_count.
+        let app = build_router_with_registry(state);
+        let resp = app
+            .clone()
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/registry/packs")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let list: Vec<PackMeta> =
+            serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
+        let local_meta = list
+            .iter()
+            .find(|m| m.name == "local-notes")
+            .expect("local-notes should be listed");
+        assert_eq!(local_meta.scope, TrustScope::Local);
+        assert_eq!(local_meta.provenance_edge_count, 1);
+
+        // 4. /registry/packs/:name/:version/manifest.json must return the cached
+        // manifest with the provenance stats.
+        let resp = app
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/registry/packs/local-notes/1.0.0/manifest.json")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), AxStatus::OK);
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), 1 << 20).await.unwrap()).unwrap();
+        assert_eq!(manifest["name"], "local-notes");
+        assert_eq!(manifest["stats"]["graph_edges"], 1);
     }
 }

@@ -30,10 +30,13 @@
 //! packs, dozens of installs per day) that's fine; if it ever becomes the bottleneck,
 //! move to a sqlite-backed metadata store without changing the public API.
 
+pub mod federation;
 pub mod store;
 
+pub use federation::{sync_from, sync_from_async, FederationError, PeerConfig, SyncReport};
 pub use store::{
-    PackMeta, PublishReceipt, PublishStatus, Registry, RegistryError, RevocationEvent,
+    PackMeta, PublishReceipt, PublishStatus, Registry, RegistryError, RevocationEvent, TrustGrant,
+    TrustScope,
 };
 
 use axum::{
@@ -53,6 +56,7 @@ pub fn router(registry: Arc<Registry>) -> Router {
         .route("/packs", get(list_packs).post(publish_pack))
         .route("/packs/:name", get(list_versions))
         .route("/packs/:name/:version/download", get(download_pack))
+        .route("/packs/:name/:version/manifest.json", get(fetch_manifest))
         .route("/packs/:name/:version", delete(revoke_pack))
         .route("/search", get(search_packs))
         .route("/trusted-keys", get(list_trusted_keys))
@@ -133,6 +137,24 @@ async fn download_pack(
         .into_response())
 }
 
+/// `GET /registry/packs/:name/:version/manifest.json` — return the cached manifest.
+/// Includes the full provenance graph (Sprint 14c) so a subscriber can render
+/// "this pack was derived from these 3 memories" without unpacking the tarball.
+async fn fetch_manifest(
+    State(reg): State<Arc<Registry>>,
+    Path((name, version)): Path<(String, String)>,
+) -> Result<Response, Response> {
+    let bytes = reg
+        .download_manifest(&name, &version)
+        .map_err(|e| e.into_response())?;
+    Ok((
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        bytes,
+    )
+        .into_response())
+}
+
 /// `DELETE /registry/packs/:name/:version` — unpublish. Appends to the revocations log
 /// so federation peers see the change in their next sync (Sprint 14).
 async fn revoke_pack(
@@ -158,21 +180,34 @@ async fn search_packs(
     reg.search(&q).map(Json).map_err(|e| e.into_response())
 }
 
-/// `GET /registry/trusted-keys` — list the trusted author public keys this registry will
+/// `GET /registry/trusted-keys` — list the trust grants (key + scope) this registry will
 /// accept signatures from.
 async fn list_trusted_keys(
     State(reg): State<Arc<Registry>>,
-) -> Result<Json<Vec<cairn_pack::PublicKey>>, Response> {
-    reg.trusted_keys().map(Json).map_err(|e| e.into_response())
+) -> Result<Json<Vec<TrustGrant>>, Response> {
+    reg.trust_grants().map(Json).map_err(|e| e.into_response())
 }
 
-/// `GET /registry/revocations` — the append-only log of unpublish events.
+/// `GET /registry/revocations[?since=<unix_seconds>]` — the append-only log of
+/// unpublish events. Federation subscribers pass `since=<their high-water mark>` to
+/// pull only events newer than what they already have. Without `since`, returns the
+/// entire log.
 async fn list_revocations(
     State(reg): State<Arc<Registry>>,
+    Query(q): Query<RevocationsQuery>,
 ) -> Result<Json<Vec<RevocationEvent>>, Response> {
-    reg.list_revocations()
-        .map(Json)
-        .map_err(|e| e.into_response())
+    let out = match q.since {
+        Some(ts) => reg.revocations_since(ts).map_err(|e| e.into_response())?,
+        None => reg.list_revocations().map_err(|e| e.into_response())?,
+    };
+    Ok(Json(out))
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct RevocationsQuery {
+    /// Unix timestamp (seconds). Revocation events strictly newer than this are
+    /// returned. Defaults to "no filter".
+    pub since: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Convenience impl so axum can convert a [`RegistryError`] into a response.

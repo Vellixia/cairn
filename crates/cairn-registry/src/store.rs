@@ -10,7 +10,7 @@ use std::{
 };
 use thiserror::Error;
 
-use cairn_pack::{Manifest, PublicKey, VerifyError};
+use cairn_pack::{Manifest, PublicKey};
 
 /// Errors that the registry can return to the HTTP layer. The [`From`] impls let callers
 /// `?`-propagate `io::Error` and `serde_json::Error` cleanly.
@@ -30,6 +30,15 @@ pub enum RegistryError {
     AlreadyExists(String),
     #[error("malformed trusted key: {0}")]
     BadKey(String),
+    /// Pack's declared scope is wider than any trust grant allows. Surfaced with the
+    /// pack's scope and the granted scopes so the operator can fix the configuration.
+    #[error(
+        "pack scope {pack_scope:?} not allowed by any trust grant (granted: {granted_scopes:?})"
+    )]
+    ScopeDenied {
+        pack_scope: TrustScope,
+        granted_scopes: Vec<TrustScope>,
+    },
 }
 
 /// What `POST /registry/packs` returns — captures both the verification path taken and
@@ -73,6 +82,53 @@ pub struct PackMeta {
     pub has_ed25519_signature: bool,
     pub memory_count: usize,
     pub download_count: u64,
+    /// How widely this pack is meant to be shared (Sprint 14). Defaults to `public`.
+    #[serde(default)]
+    pub scope: TrustScope,
+    /// Origin registry URL for federation-replicated packs. `None` for locally-published.
+    /// When set, the federation sync layer uses this to avoid loops and to verify the
+    /// pack's provenance.
+    #[serde(default)]
+    pub origin: Option<String>,
+    /// Number of provenance graph edges carried in this pack (Sprint 14c). The edges
+    /// themselves live in `graph.jsonl` inside the tarball — `GET /registry/packs/:name`
+    /// returns the count and `GET /registry/packs/:name/:version/manifest.json` returns
+    /// the full graph.
+    #[serde(default)]
+    pub provenance_edge_count: usize,
+}
+
+/// How widely a pack is meant to be shared. The scope is asserted by the publisher (in
+/// the manifest) and enforced by the federation sync layer (Sprint 14). A `local` pack
+/// shouldn't propagate to other registries; a `team` pack goes to the team registry
+/// only; `public` is the default for open sharing.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TrustScope {
+    /// Only this registry should ever hold it. Reject any incoming federation sync that
+    /// claims this pack is from a different origin.
+    Local,
+    /// Share with the team registry (the operator's own organization). Other teams
+    /// shouldn't see it via public registry discovery.
+    Team,
+    /// Share with the world. No scope-based filtering applies.
+    #[default]
+    Public,
+}
+
+/// A trusted author public key, with the scope the local operator allows. When a pack
+/// arrives signed by `key`, the registry checks that the pack's own scope is at most
+/// as wide as `allows`. A `Local`-scoped trust entry won't accept `Public`-scoped packs,
+/// even if the signature verifies.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustGrant {
+    pub key: PublicKey,
+    /// Highest scope this key is allowed to publish at.
+    pub allows: TrustScope,
+    /// Free-form display label (e.g. "alice@vellixia" or "vellixia-org").
+    pub label: Option<String>,
+    #[serde(default = "Utc::now")]
+    pub granted_at: DateTime<Utc>,
 }
 
 /// Append-only log entry recording that an operator (or federation peer) revoked a
@@ -95,7 +151,7 @@ pub struct Registry {
 #[derive(Default)]
 struct RegistryState {
     index: Vec<PackMeta>,
-    trusted_keys: Vec<PublicKey>,
+    trusted_keys: Vec<TrustGrant>,
     revocations: Vec<RevocationEvent>,
 }
 
@@ -111,8 +167,26 @@ impl Registry {
             Err(e) if e.kind() == io::ErrorKind::NotFound => Vec::new(),
             Err(e) => return Err(e.into()),
         };
-        let trusted_keys: Vec<PublicKey> = match fs::read(root.join("trusted_keys.json")) {
-            Ok(b) => serde_json::from_slice(&b).unwrap_or_default(),
+        // trusted_keys.json may be in either the legacy `Vec<PublicKey>` shape (v0.5.0
+        // Sprint 13) or the v0.5.0 Sprint 14 `Vec<TrustGrant>` shape. We probe both.
+        let trusted_keys: Vec<TrustGrant> = match fs::read(root.join("trusted_keys.json")) {
+            Ok(b) => match serde_json::from_slice::<Vec<TrustGrant>>(&b) {
+                Ok(v) => v,
+                Err(_) => {
+                    // Fall back to legacy: list of plain public keys, treat them as
+                    // `public`-scope grants with no label.
+                    let legacy: Vec<PublicKey> = serde_json::from_slice(&b).unwrap_or_default();
+                    legacy
+                        .into_iter()
+                        .map(|key| TrustGrant {
+                            key,
+                            allows: TrustScope::Public,
+                            label: None,
+                            granted_at: Utc::now(),
+                        })
+                        .collect()
+                }
+            },
             Err(e) if e.kind() == io::ErrorKind::NotFound => Vec::new(),
             Err(e) => return Err(e.into()),
         };
@@ -167,8 +241,8 @@ impl Registry {
             .collect())
     }
 
-    /// Return the trusted author public keys this registry will accept signatures from.
-    pub fn trusted_keys(&self) -> Result<Vec<PublicKey>, RegistryError> {
+    /// Return the trust grants (key + scope) this registry will accept signatures from.
+    pub fn trust_grants(&self) -> Result<Vec<TrustGrant>, RegistryError> {
         Ok(self
             .state
             .lock()
@@ -177,15 +251,43 @@ impl Registry {
             .clone())
     }
 
-    /// Add (or replace) a trusted public key. Used by the CLI's `pack trust <hex>` command
-    /// or by the registry's first-run admin bootstrap.
-    pub fn add_trusted_key(&self, key: PublicKey) -> Result<(), RegistryError> {
+    /// Add a trust grant (key + scope). If the key is already trusted, the grant is
+    /// updated to the new scope/label rather than duplicated. Used by the CLI's
+    /// `pack trust <hex> --scope <local|team|public>` command or by the registry's
+    /// first-run admin bootstrap.
+    pub fn trust(
+        &self,
+        key: PublicKey,
+        scope: TrustScope,
+        label: Option<String>,
+    ) -> Result<(), RegistryError> {
         let mut g = self.state.lock().expect("registry lock poisoned");
-        if !g.trusted_keys.contains(&key) {
-            g.trusted_keys.push(key);
+        if let Some(existing) = g.trusted_keys.iter_mut().find(|t| t.key == key) {
+            existing.allows = scope;
+            existing.label = label.or(existing.label.clone());
+            existing.granted_at = Utc::now();
+        } else {
+            g.trusted_keys.push(TrustGrant {
+                key,
+                allows: scope,
+                label,
+                granted_at: Utc::now(),
+            });
+        }
+        self.write_trusted_keys(&g.trusted_keys)?;
+        Ok(())
+    }
+
+    /// Drop a trust grant by key. No-op if the key isn't trusted.
+    pub fn untrust(&self, key: &PublicKey) -> Result<bool, RegistryError> {
+        let mut g = self.state.lock().expect("registry lock poisoned");
+        let before = g.trusted_keys.len();
+        g.trusted_keys.retain(|t| &t.key != key);
+        let removed = g.trusted_keys.len() != before;
+        if removed {
             self.write_trusted_keys(&g.trusted_keys)?;
         }
-        Ok(())
+        Ok(removed)
     }
 
     /// List the revocation log (chronological order).
@@ -198,12 +300,48 @@ impl Registry {
             .clone())
     }
 
+    /// The newest revocation timestamp known to this registry — the high-water mark for
+    /// federation sync. `None` if no revocations have happened yet (a fresh subscriber
+    /// should pass `since=0` to get the full log).
+    pub fn last_revocation_ts(&self) -> Option<DateTime<Utc>> {
+        self.state
+            .lock()
+            .expect("registry lock poisoned")
+            .revocations
+            .iter()
+            .map(|r| r.revoked_at)
+            .max()
+    }
+
+    /// Revocation events strictly newer than `since` (RFC3339 comparison). Used by the
+    /// federation sync layer to pull only what the subscriber hasn't seen.
+    pub fn revocations_since(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<RevocationEvent>, RegistryError> {
+        Ok(self
+            .state
+            .lock()
+            .expect("registry lock poisoned")
+            .revocations
+            .iter()
+            .filter(|r| r.revoked_at > since)
+            .cloned()
+            .collect())
+    }
+
     /// Publish a tarball. Returns the receipt (including which path: signed/unsigned).
     ///
     /// **Verification policy:** if the tarball contains `signature.ed25519`, at least one
     /// of `trusted_keys` (or the per-call override) must verify the signature. If the
     /// tarball has no Ed25519 signature, it's stored anyway — the per-file SHA-256s are
     /// still integrity-checked at install time.
+    ///
+    /// **Scope policy (Sprint 14):** when a pack's manifest declares a `scope`, the
+    /// matching trust grant must allow a scope at least as wide. A grant with
+    /// `allows = Team` can sign `local` or `team` packs, but not `public`. Mismatched
+    /// scopes fail with [`RegistryError::ScopeDenied`] — the publisher should narrow
+    /// the pack's scope or request a wider grant.
     pub fn publish(
         &self,
         tarball: &[u8],
@@ -217,10 +355,17 @@ impl Registry {
             .ok_or_else(|| RegistryError::Pack("missing manifest.json".into()))?;
         let manifest: Manifest =
             serde_json::from_slice(&manifest_entry.body).map_err(RegistryError::Json)?;
+        let pack_scope = manifest_scope(&manifest);
 
-        // Decide which trusted-key set applies.
-        let trusted = match trusted_override {
-            Some(hex) => vec![parse_pubkey(hex)?],
+        // Decide which trusted-key set applies. The override is treated as a
+        // public-scope grant.
+        let grants: Vec<TrustGrant> = match trusted_override {
+            Some(hex) => vec![TrustGrant {
+                key: parse_pubkey(hex)?,
+                allows: TrustScope::Public,
+                label: Some("one-off override".into()),
+                granted_at: Utc::now(),
+            }],
             None => self
                 .state
                 .lock()
@@ -229,20 +374,44 @@ impl Registry {
                 .clone(),
         };
 
-        let (status, signer_hex) = match cairn_pack::install::verify_ed25519_signature(
-            &entries,
-            &manifest_entry.body,
-            &trusted,
-        ) {
-            Ok(true) => {
-                // Find the matching key for the receipt — verify_ed25519 doesn't tell us which
-                // key matched, so re-test to identify the signer.
-                let signer = find_signer(&entries, &manifest_entry.body, &trusted);
-                (PublishStatus::Signed, signer.map(|k| k.to_hex()))
+        // Try each grant; the first one whose key matches AND whose scope allows this
+        // pack's scope wins.
+        let mut matched_signer: Option<PublicKey> = None;
+        for grant in &grants {
+            if !scope_allows(grant.allows, pack_scope) {
+                continue;
             }
-            Ok(false) => (PublishStatus::Unsigned, None),
-            Err(VerifyError::Mismatch) => return Err(RegistryError::InvalidSignature),
-            Err(_) => return Err(RegistryError::InvalidSignature),
+            if cairn_pack::install::verify_ed25519_signature(
+                &entries,
+                &manifest_entry.body,
+                &[grant.key],
+            )
+            .ok()
+            .unwrap_or(false)
+            {
+                matched_signer = Some(grant.key);
+                break;
+            }
+        }
+
+        // Decide signed vs unsigned based on the manifest's signature entry.
+        let has_signature = entries.iter().any(|e| e.name == "signature.ed25519");
+        let (status, signer_hex) = match (has_signature, matched_signer) {
+            (true, Some(k)) => (PublishStatus::Signed, Some(k.to_hex())),
+            (true, None) => {
+                // Signed but no grant accepted the signature. Either no trust or scope
+                // mismatch — surface the latter explicitly so the operator can fix it.
+                let has_compatible_grant =
+                    grants.iter().any(|g| scope_allows(g.allows, pack_scope));
+                if has_compatible_grant {
+                    return Err(RegistryError::InvalidSignature);
+                }
+                return Err(RegistryError::ScopeDenied {
+                    pack_scope,
+                    granted_scopes: grants.iter().map(|g| g.allows).collect(),
+                });
+            }
+            (false, _) => (PublishStatus::Unsigned, None),
         };
 
         // Stage the tarball to packs/<name>/<version>.cairnpkg.
@@ -264,11 +433,11 @@ impl Registry {
         let size_bytes = fs::metadata(&pack_path)?.len();
 
         // Cache the manifest under a sibling filename so a quick `find` over the registry
-        // can render metadata without unpacking.
-        let manifest_cache = pack_path.with_file_name(format!(
-            "{}.manifest.json",
-            pack_path.file_name().unwrap().to_string_lossy()
-        ));
+        // can render metadata without unpacking. Use the canonical
+        // `packs/<name>/<version>.manifest.json` shape (not `<version>.cairnpkg.manifest.json`)
+        // so the `download_manifest` HTTP endpoint and a future `find` index agree on
+        // the same path.
+        let manifest_cache = pack_path.with_extension("manifest.json");
         fs::write(&manifest_cache, serde_json::to_vec_pretty(&manifest)?)?;
 
         // Append to the index.
@@ -285,6 +454,9 @@ impl Registry {
             has_ed25519_signature: status == PublishStatus::Signed,
             memory_count: manifest.stats.memories,
             download_count: 0,
+            scope: pack_scope,
+            origin: None,
+            provenance_edge_count: manifest.stats.graph_edges,
         };
         {
             let mut g = self.state.lock().expect("registry lock poisoned");
@@ -311,6 +483,23 @@ impl Registry {
             .join("packs")
             .join(name)
             .join(format!("{version}.cairnpkg"));
+        if !path.exists() {
+            return Err(RegistryError::NotFound(format!("{name}-{version}")));
+        }
+        Ok(fs::read(&path)?)
+    }
+
+    /// Read the cached manifest for a stored pack (Sprint 14c). The cached file lives
+    /// beside the tarball as `<version>.manifest.json` and contains the full pack
+    /// metadata — including the graph.jsonl contents (when the publisher included
+    /// provenance edges). Useful for `/dashboard/registry` to render the provenance
+    /// chain without unpacking the tarball.
+    pub fn download_manifest(&self, name: &str, version: &str) -> Result<Vec<u8>, RegistryError> {
+        let path = self
+            .root
+            .join("packs")
+            .join(name)
+            .join(format!("{version}.manifest.json"));
         if !path.exists() {
             return Err(RegistryError::NotFound(format!("{name}-{version}")));
         }
@@ -352,6 +541,30 @@ impl Registry {
         Ok(event)
     }
 
+    /// Federation-cascade revoke: append a revocation event without requiring a local
+    /// pack tarball to be present. Used by [`crate::federation::sync_from`] when
+    /// propagating a peer registry's revocation to a subscriber that may never have
+    /// installed the pack locally. Returns the event that was recorded.
+    pub fn revoke_if_exists(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> Result<RevocationEvent, RegistryError> {
+        let event = RevocationEvent {
+            name: name.to_string(),
+            version: version.to_string(),
+            revoked_at: Utc::now(),
+            reason: Some("cascade from peer".into()),
+        };
+        let mut g = self.state.lock().expect("registry lock poisoned");
+        g.index
+            .retain(|m| !(m.name == name && m.version == version));
+        self.write_index(&g.index)?;
+        g.revocations.push(event.clone());
+        self.write_revocations(&g.revocations)?;
+        Ok(event)
+    }
+
     fn write_index(&self, index: &[PackMeta]) -> Result<(), RegistryError> {
         let tmp = self.root.join("index.json.tmp");
         {
@@ -364,7 +577,7 @@ impl Registry {
         Ok(())
     }
 
-    fn write_trusted_keys(&self, keys: &[PublicKey]) -> Result<(), RegistryError> {
+    fn write_trusted_keys(&self, keys: &[TrustGrant]) -> Result<(), RegistryError> {
         let tmp = self.root.join("trusted_keys.json.tmp");
         {
             let mut f = fs::File::create(&tmp)?;
@@ -398,22 +611,36 @@ fn parse_pubkey(hex_str: &str) -> Result<PublicKey, RegistryError> {
     PublicKey::from_bytes(&bytes).map_err(|_| RegistryError::BadKey(hex_str.into()))
 }
 
-/// Find which trusted key signed this pack — used to populate the `signed_by` field on
-/// the publish receipt.
-fn find_signer(
-    entries: &[cairn_pack::install::TarEntry],
-    manifest_bytes: &[u8],
-    trusted: &[PublicKey],
-) -> Option<PublicKey> {
-    for key in trusted {
-        if cairn_pack::install::verify_ed25519_signature(entries, manifest_bytes, &[*key])
-            .ok()
-            .unwrap_or(false)
-        {
-            return Some(*key);
+/// Read the pack's declared scope from its manifest. The current `.cairnpkg` manifest
+/// doesn't carry an explicit `scope` field — we infer it from the `description` field's
+/// `scope: <local|team|public>` prefix when present, falling back to `public`. Future
+/// revisions will add a first-class `scope` field to the manifest schema.
+fn manifest_scope(manifest: &cairn_pack::Manifest) -> TrustScope {
+    let desc = &manifest.description;
+    for (marker, scope) in [
+        ("scope: local", TrustScope::Local),
+        ("scope: team", TrustScope::Team),
+        ("scope: public", TrustScope::Public),
+    ] {
+        if desc.to_ascii_lowercase().contains(marker) {
+            return scope;
         }
     }
-    None
+    TrustScope::Public
+}
+
+/// True when a trust grant with `granted_scope` is allowed to publish packs whose
+/// declared scope is `pack_scope`. Local ⊂ Team ⊂ Public (i.e. a wider grant can
+/// publish a narrower-scoped pack, but not the other way around).
+fn scope_allows(granted: TrustScope, pack: TrustScope) -> bool {
+    fn rank(s: TrustScope) -> u8 {
+        match s {
+            TrustScope::Local => 0,
+            TrustScope::Team => 1,
+            TrustScope::Public => 2,
+        }
+    }
+    rank(granted) >= rank(pack)
 }
 #[cfg(test)]
 mod tests {
@@ -462,7 +689,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let reg = Registry::open(dir.path()).unwrap();
         let kp = Keypair::generate();
-        reg.add_trusted_key(kp.public()).unwrap();
+        reg.trust(kp.public(), TrustScope::Public, None).unwrap();
 
         let bytes = signed_pack_bytes(&kp);
         let receipt = reg.publish(&bytes, None).unwrap();
@@ -477,14 +704,135 @@ mod tests {
     fn publish_signed_pack_without_trusted_key_rejects() {
         let dir = TempDir::new().unwrap();
         let reg = Registry::open(dir.path()).unwrap();
-        // Note: no add_trusted_key call.
+        // Note: no trust() call.
         let kp = Keypair::generate();
         let bytes = signed_pack_bytes(&kp);
         let err = reg.publish(&bytes, None).unwrap_err();
+        // Empty grants list → pack's public scope is denied by every grant (none).
         assert!(
-            matches!(err, RegistryError::InvalidSignature),
+            matches!(err, RegistryError::ScopeDenied { .. }),
             "got {err:?}"
         );
+    }
+
+    #[test]
+    fn publish_pack_with_team_scope_rejected_by_local_only_grant() {
+        let dir = TempDir::new().unwrap();
+        let reg = Registry::open(dir.path()).unwrap();
+        let kp = Keypair::generate();
+        // Grant only allows Local — pack's team scope should be rejected.
+        reg.trust(kp.public(), TrustScope::Local, None).unwrap();
+
+        let mut pack = Pack::new("team-pack", "1.0.0");
+        pack.description = "scope: team — shared with the team".into();
+        pack.memories
+            .push(serde_json::json!({"id": "m1", "content": "x"}));
+        let td = TempDir::new().unwrap();
+        let out = td.path().join("team.cairnpkg");
+        pack.write_tarball_signed(&out, &kp).unwrap();
+        let bytes = std::fs::read(&out).unwrap();
+
+        let err = reg.publish(&bytes, None).unwrap_err();
+        match err {
+            RegistryError::ScopeDenied {
+                pack_scope: TrustScope::Team,
+                granted_scopes,
+            } => {
+                assert_eq!(granted_scopes, vec![TrustScope::Local]);
+            }
+            other => panic!("expected ScopeDenied, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn publish_team_scoped_pack_with_team_grant_succeeds() {
+        let dir = TempDir::new().unwrap();
+        let reg = Registry::open(dir.path()).unwrap();
+        let kp = Keypair::generate();
+        reg.trust(kp.public(), TrustScope::Team, Some("team-bot".into()))
+            .unwrap();
+
+        let mut pack = Pack::new("team-ok", "1.0.0");
+        pack.description = "scope: team".into();
+        pack.memories
+            .push(serde_json::json!({"id": "m1", "content": "x"}));
+        let td = TempDir::new().unwrap();
+        let out = td.path().join("team.cairnpkg");
+        pack.write_tarball_signed(&out, &kp).unwrap();
+        let bytes = std::fs::read(&out).unwrap();
+
+        let receipt = reg.publish(&bytes, None).unwrap();
+        assert_eq!(receipt.status, PublishStatus::Signed);
+
+        // Listing must report the scope on the PackMeta.
+        let all = reg.list_all().unwrap();
+        assert_eq!(all[0].scope, TrustScope::Team);
+        // And the trust grant's label must be retrievable.
+        let grants = reg.trust_grants().unwrap();
+        assert_eq!(grants.len(), 1);
+        assert_eq!(grants[0].label.as_deref(), Some("team-bot"));
+    }
+
+    #[test]
+    fn untrust_removes_a_key_and_blocks_future_publishes() {
+        let dir = TempDir::new().unwrap();
+        let reg = Registry::open(dir.path()).unwrap();
+        let kp = Keypair::generate();
+        reg.trust(kp.public(), TrustScope::Public, None).unwrap();
+        assert_eq!(reg.trust_grants().unwrap().len(), 1);
+
+        assert!(reg.untrust(&kp.public()).unwrap());
+        assert!(
+            !reg.untrust(&kp.public()).unwrap(),
+            "second untrust is a no-op"
+        );
+        assert!(reg.trust_grants().unwrap().is_empty());
+
+        // Publish now fails because no grant is configured.
+        let bytes = signed_pack_bytes(&kp);
+        let err = reg.publish(&bytes, None).unwrap_err();
+        assert!(
+            matches!(err, RegistryError::ScopeDenied { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn trust_updating_an_existing_key_replaces_scope_and_preserves_label() {
+        let dir = TempDir::new().unwrap();
+        let reg = Registry::open(dir.path()).unwrap();
+        let kp = Keypair::generate();
+        reg.trust(kp.public(), TrustScope::Team, Some("alice".into()))
+            .unwrap();
+        reg.trust(kp.public(), TrustScope::Public, None).unwrap();
+
+        let grants = reg.trust_grants().unwrap();
+        assert_eq!(grants.len(), 1, "should update in place, not duplicate");
+        assert_eq!(grants[0].allows, TrustScope::Public);
+        assert_eq!(grants[0].label.as_deref(), Some("alice"), "label preserved");
+    }
+
+    #[test]
+    fn scope_marker_in_description_is_detected() {
+        // Sanity-check the description parser used by the publish path.
+        let m_local = cairn_pack::Manifest::new(
+            "x",
+            "1",
+            "a",
+            "scope: local — for me only",
+            Default::default(),
+            Default::default(),
+        );
+        assert_eq!(manifest_scope(&m_local), TrustScope::Local);
+        let m_default = cairn_pack::Manifest::new(
+            "x",
+            "1",
+            "a",
+            "no scope here",
+            Default::default(),
+            Default::default(),
+        );
+        assert_eq!(manifest_scope(&m_default), TrustScope::Public);
     }
 
     #[test]
@@ -516,6 +864,41 @@ mod tests {
     }
 
     #[test]
+    fn publish_records_provenance_edge_count_in_pack_meta() {
+        let dir = TempDir::new().unwrap();
+        let reg = Registry::open(dir.path()).unwrap();
+        let bytes = {
+            let td = TempDir::new().unwrap();
+            let out = td.path().join("prov.cairnpkg");
+            let mut pack = Pack::new("prov", "1.0.0");
+            pack.memories
+                .push(serde_json::json!({"id": "m1", "content": "alpha"}));
+            pack.graph_edges.push(serde_json::json!({
+                "src": "m1",
+                "dst": "m2",
+                "kind": "derived_from",
+            }));
+            pack.graph_edges.push(serde_json::json!({
+                "src": "m1",
+                "dst": "src/foo.rs",
+                "kind": "applies_to",
+            }));
+            pack.write_tarball(&out).unwrap();
+            std::fs::read(&out).unwrap()
+        };
+        reg.publish(&bytes, None).unwrap();
+
+        let meta = reg.list_all().unwrap();
+        assert_eq!(meta[0].provenance_edge_count, 2);
+
+        // The cached manifest must be readable via download_manifest and include the
+        // graph edge count.
+        let manifest_bytes = reg.download_manifest("prov", "1.0.0").unwrap();
+        let m: Manifest = serde_json::from_slice(&manifest_bytes).unwrap();
+        assert_eq!(m.stats.graph_edges, 2);
+    }
+
+    #[test]
     fn revoke_removes_the_pack_and_appends_to_log() {
         let dir = TempDir::new().unwrap();
         let reg = Registry::open(dir.path()).unwrap();
@@ -544,7 +927,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let reg = Registry::open(dir.path()).unwrap();
         let kp = Keypair::generate();
-        reg.add_trusted_key(kp.public()).unwrap();
+        reg.trust(kp.public(), TrustScope::Public, None).unwrap();
 
         let by_name = signed_pack_bytes(&kp); // alpha, author "tester"
         let bytes2 = {

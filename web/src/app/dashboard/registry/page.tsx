@@ -37,6 +37,26 @@ interface PackMeta {
   has_ed25519_signature: boolean;
   memory_count: number;
   download_count: number;
+  scope?: "local" | "team" | "public";
+  origin?: string | null;
+  provenance_edge_count?: number;
+}
+
+interface ProvenanceManifest {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  description: string;
+  created_at: string;
+  files: Record<string, string>;
+  stats: {
+    memories: number;
+    profile: number;
+    patterns: number;
+    graph_edges: number;
+  };
+  signers: Array<{ /* 32 bytes; rendered as hex on the client */ }>;
 }
 
 interface PublishReceipt {
@@ -179,6 +199,7 @@ function BrowseTab() {
                   <th className="py-1 pr-3 text-right">Memories</th>
                   <th className="py-1 pr-3 text-right">Size</th>
                   <th className="py-1 pr-3">Signer</th>
+                  <th className="py-1 pr-3">Scope / Prov</th>
                   <th className="py-1 pr-3">Stored</th>
                   <th className="py-1 pr-3">Actions</th>
                 </tr>
@@ -198,6 +219,7 @@ function BrowseTab() {
 
 function PackRow({ pack }: { pack: PackMeta }) {
   const qc = useQueryClient();
+  const [showProv, setShowProv] = useState(false);
   const revoke = useMutation({
     mutationFn: () =>
       fetch(`/registry/packs/${pack.name}/${pack.version}`, { method: "DELETE" }).then(
@@ -210,51 +232,132 @@ function PackRow({ pack }: { pack: PackMeta }) {
     },
   });
   return (
-    <tr className="border-b border-line/40">
-      <td className="py-2 pr-3 font-mono">{pack.name}</td>
-      <td className="py-2 pr-3 font-mono">{pack.version}</td>
-      <td className="py-2 pr-3">{pack.author || "—"}</td>
-      <td className="py-2 pr-3 text-right font-mono">{pack.memory_count}</td>
-      <td className="py-2 pr-3 text-right font-mono">{fmtBytes(pack.size_bytes)}</td>
-      <td className="py-2 pr-3">
-        {pack.has_ed25519_signature ? (
-          <Badge className="bg-emerald-600/20 text-emerald-300 border-emerald-600/40">
-            signed
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="text-amber-300 border-amber-600/40">
-            unsigned
-          </Badge>
-        )}
-        {pack.signer_pubkey && (
-          <span className="ml-2 font-mono text-[10px] text-muted-foreground">
-            {pack.signer_pubkey.slice(0, 12)}…
-          </span>
-        )}
-      </td>
-      <td className="py-2 pr-3 font-mono text-[10px] text-muted-foreground">
-        {new Date(pack.stored_at).toLocaleString()}
-      </td>
-      <td className="py-2 pr-3">
-        <div className="flex gap-2">
-          <a
-            href={`/registry/packs/${pack.name}/${pack.version}/download`}
-            className="text-[10px] text-blue-400 hover:underline"
-            download={`${pack.name}-${pack.version}.cairnpkg`}
-          >
-            download
-          </a>
-          <button
-            type="button"
-            onClick={() => revoke.mutate()}
-            disabled={revoke.isPending}
-            className="text-[10px] text-red-400 hover:underline disabled:opacity-50"
-          >
-            {revoke.isPending ? "revoking…" : "revoke"}
-          </button>
-        </div>
-      </td>
-    </tr>
+    <>
+      <tr className="border-b border-line/40">
+        <td className="py-2 pr-3 font-mono">{pack.name}</td>
+        <td className="py-2 pr-3 font-mono">{pack.version}</td>
+        <td className="py-2 pr-3">{pack.author || "—"}</td>
+        <td className="py-2 pr-3 text-right font-mono">{pack.memory_count}</td>
+        <td className="py-2 pr-3 text-right font-mono">{fmtBytes(pack.size_bytes)}</td>
+        <td className="py-2 pr-3">
+          {pack.has_ed25519_signature ? (
+            <Badge className="bg-emerald-600/20 text-emerald-300 border-emerald-600/40">
+              signed
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-amber-300 border-amber-600/40">
+              unsigned
+            </Badge>
+          )}
+          {pack.signer_pubkey && (
+            <span className="ml-2 font-mono text-[10px] text-muted-foreground">
+              {pack.signer_pubkey.slice(0, 12)}…
+            </span>
+          )}
+        </td>
+        <td className="py-2 pr-3">
+          {pack.scope && pack.scope !== "public" && (
+            <Badge variant="outline" className="text-[10px]">
+              {pack.scope}
+            </Badge>
+          )}
+          {(pack.provenance_edge_count ?? 0) > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowProv((v) => !v)}
+              className="ml-2 text-[10px] text-blue-400 hover:underline"
+            >
+              {pack.provenance_edge_count} edge{pack.provenance_edge_count === 1 ? "" : "s"}
+            </button>
+          )}
+        </td>
+        <td className="py-2 pr-3 font-mono text-[10px] text-muted-foreground">
+          {new Date(pack.stored_at).toLocaleString()}
+        </td>
+        <td className="py-2 pr-3">
+          <div className="flex gap-2">
+            <a
+              href={`/registry/packs/${pack.name}/${pack.version}/download`}
+              className="text-[10px] text-blue-400 hover:underline"
+              download={`${pack.name}-${pack.version}.cairnpkg`}
+            >
+              download
+            </a>
+            <button
+              type="button"
+              onClick={() => revoke.mutate()}
+              disabled={revoke.isPending}
+              className="text-[10px] text-red-400 hover:underline disabled:opacity-50"
+            >
+              {revoke.isPending ? "revoking…" : "revoke"}
+            </button>
+          </div>
+        </td>
+      </tr>
+      {showProv && (
+        <tr className="border-b border-line/40 bg-muted/20">
+          <td colSpan={8} className="py-3 px-3">
+            <ProvenancePanel pack={pack} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function ProvenancePanel({ pack }: { pack: PackMeta }) {
+  const q = useQuery({
+    queryKey: ["registry", "manifest", pack.name, pack.version],
+    queryFn: () =>
+      getJSON<ProvenanceManifest>(
+        `/registry/packs/${pack.name}/${pack.version}/manifest.json`,
+      ),
+    staleTime: 60_000,
+  });
+
+  if (q.isLoading) return <Skeleton className="h-24 w-full" />;
+  if (q.isError) {
+    return (
+      <p className="text-xs text-red-400">
+        Failed to load manifest: {(q.error as Error).message}
+      </p>
+    );
+  }
+  const m = q.data!;
+  const files = Object.entries(m.files);
+  return (
+    <div className="space-y-2 text-xs">
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="outline">id: {m.id.slice(0, 8)}…</Badge>
+        <Badge variant="outline">{m.stats.memories} memories</Badge>
+        <Badge variant="outline">{m.stats.profile} preferences</Badge>
+        <Badge variant="outline">{m.stats.patterns} patterns</Badge>
+        <Badge variant="outline">{m.stats.graph_edges} graph edges</Badge>
+      </div>
+      <p className="text-muted-foreground">
+        Manifest files (sha256 per entry). The graph edges live in{" "}
+        <code className="font-mono">graph.jsonl</code> inside the tarball —
+        download it to see the full provenance chain.
+      </p>
+      <div className="overflow-x-auto rounded border border-line bg-background">
+        <table className="w-full text-[10px]">
+          <thead className="border-b border-line text-muted-foreground">
+            <tr>
+              <th className="py-1 px-2 text-left">File</th>
+              <th className="py-1 px-2 text-left">sha256</th>
+            </tr>
+          </thead>
+          <tbody>
+            {files.map(([name, hash]) => (
+              <tr key={name} className="border-b border-line/40">
+                <td className="py-1 px-2 font-mono">{name}</td>
+                <td className="py-1 px-2 font-mono">{hash.slice(0, 16)}…</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
