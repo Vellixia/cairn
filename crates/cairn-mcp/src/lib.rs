@@ -23,15 +23,19 @@ use std::sync::Arc;
 /// Default protocol version we advertise if the client doesn't specify one.
 const PROTOCOL_VERSION: &str = "2025-06-18";
 
+pub mod prompts;
+pub mod resources;
+
 pub struct McpServer {
-    ctx: Arc<ContextEngine>,
-    guard: Arc<Guard>,
-    asm: Arc<Assembler>,
-    shell: Arc<ShellCompressor>,
-    profile: Arc<Profile>,
-    san: cairn_share::Sanitizer,
-    mem: Arc<MemoryEngine>,
-    store: Arc<cairn_store::Store>,
+    pub ctx: Arc<ContextEngine>,
+    pub guard: Arc<Guard>,
+    pub asm: Arc<Assembler>,
+    pub shell: Arc<ShellCompressor>,
+    pub profile: Arc<Profile>,
+    pub san: cairn_share::Sanitizer,
+    pub mem: Arc<MemoryEngine>,
+    pub store: Arc<cairn_store::Store>,
+    pub config: Config,
 }
 
 impl McpServer {
@@ -50,6 +54,7 @@ impl McpServer {
             san: cairn_share::Sanitizer::new(),
             mem,
             store,
+            config: cfg.clone(),
         })
     }
 
@@ -100,7 +105,7 @@ impl McpServer {
                     id,
                     json!({
                         "protocolVersion": ver,
-                        "capabilities": { "tools": {} },
+                        "capabilities": { "tools": {}, "resources": { "subscribe": true }, "prompts": {} },
                         "serverInfo": { "name": "cairn", "version": env!("CARGO_PKG_VERSION") }
                     }),
                 ))
@@ -109,6 +114,56 @@ impl McpServer {
             "ping" => Some(ok(id, json!({}))),
             "tools/list" => Some(ok(id, json!({ "tools": tool_defs() }))),
             "tools/call" => Some(self.call_tool(id, req.get("params"))),
+            "resources/list" => Some(ok(
+                id,
+                json!({
+                    "resources": resources::resource_defs().iter().map(|r| json!({
+                        "uri": r.uri,
+                        "name": r.name,
+                        "description": r.description,
+                        "mimeType": r.mime_type,
+                    })).collect::<Vec<_>>()
+                }),
+            )),
+            "resources/read" => {
+                let uri = req
+                    .get("params")
+                    .and_then(|p| p.get("uri"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                match resources::read_resource(self, uri) {
+                    Ok(v) => Some(ok(
+                        id,
+                        json!({ "contents": [{
+                        "uri": uri,
+                        "mimeType": if uri == "cairn://config/toml" { "text/plain" } else { "application/json" },
+                        "text": v.to_string(),
+                    }] }),
+                    )),
+                    Err(e) => Some(err(id, -32602, &e)),
+                }
+            }
+            "prompts/list" => Some(ok(
+                id,
+                json!({
+                    "prompts": prompts::prompt_defs().iter().map(|p| json!({
+                        "name": p.name,
+                        "description": p.description,
+                        "arguments": p.arguments,
+                    })).collect::<Vec<_>>()
+                }),
+            )),
+            "prompts/get" => {
+                let name = req
+                    .get("params")
+                    .and_then(|p| p.get("name"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                match prompts::render_prompt(name) {
+                    Ok(v) => Some(ok(id, v)),
+                    Err(e) => Some(err(id, -32602, &e)),
+                }
+            }
             other => id.map(|id| err(Some(id), -32601, &format!("method not found: {other}"))),
         }
     }
@@ -927,6 +982,9 @@ mod tests {
             .unwrap();
         assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
         assert_eq!(init["result"]["serverInfo"]["name"], "cairn");
+        // Sprint 24: capabilities now advertise resources + prompts.
+        assert!(init["result"]["capabilities"]["resources"].is_object());
+        assert!(init["result"]["capabilities"]["prompts"].is_object());
 
         let list = s
             .handle(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
@@ -934,6 +992,22 @@ mod tests {
         let tools = list["result"]["tools"].as_array().unwrap();
         assert!(tools.iter().any(|t| t["name"] == "read"));
         assert!(tools.iter().any(|t| t["name"] == "remember"));
+
+        // Sprint 24: resources/list returns the 6 canonical resources.
+        let resources = s
+            .handle(&json!({"jsonrpc":"2.0","id":3,"method":"resources/list"}))
+            .unwrap();
+        let res_arr = resources["result"]["resources"].as_array().unwrap();
+        assert_eq!(res_arr.len(), 6, "v0.5.0 success metric: 6 MCP resources");
+        assert!(res_arr.iter().any(|r| r["uri"] == "cairn://memory/graph"));
+
+        // Sprint 24: prompts/list returns the 5 canonical prompts.
+        let prompts = s
+            .handle(&json!({"jsonrpc":"2.0","id":4,"method":"prompts/list"}))
+            .unwrap();
+        let prompts_arr = prompts["result"]["prompts"].as_array().unwrap();
+        assert_eq!(prompts_arr.len(), 5, "v0.5.0 success metric: 5 MCP prompts");
+        assert!(prompts_arr.iter().any(|p| p["name"] == "summarize-drift"));
     }
 
     #[test]

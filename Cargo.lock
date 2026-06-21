@@ -646,6 +646,8 @@ dependencies = [
  "cairn-share",
  "cairn-shell",
  "cairn-store",
+ "chrono",
+ "serde",
  "serde_json",
  "tempfile",
  "tracing",
