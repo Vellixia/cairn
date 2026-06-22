@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -61,6 +63,7 @@ export default function ContextInspectorPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+        <InfoCard {...INFOCOPY["/dashboard/context"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Context Inspector</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -137,12 +140,15 @@ export default function ContextInspectorPage() {
 
           {query.isLoading ? (
             <div className="mt-4 space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/context"]} />
               <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-40 w-full" />
             </div>
           ) : query.data ? (
             <div className="mt-4 space-y-3">
+        <InfoCard {...INFOCOPY["/dashboard/context"]} />
               <div className="grid grid-cols-2 gap-y-1 text-sm md:grid-cols-4">
+        <InfoCard {...INFOCOPY["/dashboard/context"]} />
                 <Stat k="status" v={query.data.status} />
                 <Stat k="lines" v={String(query.data.lines)} />
                 <Stat k="est. tokens" v={String(query.data.est_tokens)} />
@@ -170,7 +176,9 @@ export default function ContextInspectorPage() {
 function Stat({ k, v }: { k: string; v: string }) {
   return (
     <div className="rounded-md bg-secondary px-3 py-1.5">
+        <InfoCard {...INFOCOPY["/dashboard/context"]} />
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <InfoCard {...INFOCOPY["/dashboard/context"]} />
         {k}
       </div>
       <div className="font-mono text-teal truncate">{v}</div>

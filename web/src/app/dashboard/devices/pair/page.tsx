@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -45,6 +47,7 @@ export default function PairCodePage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+        <InfoCard {...INFOCOPY["/dashboard/devices/pair"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Pair a new device</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -125,10 +128,13 @@ export default function PairCodePage() {
           <AlertTitle>Pair code</AlertTitle>
           <AlertDescription>
             <div className="mt-2 text-center">
+        <InfoCard {...INFOCOPY["/dashboard/devices/pair"]} />
               <div className="font-mono text-4xl font-bold tracking-[0.3em] text-primary">
+        <InfoCard {...INFOCOPY["/dashboard/devices/pair"]} />
                 {pair.code}
               </div>
               <div className="mt-2 text-xs text-muted-foreground">
+        <InfoCard {...INFOCOPY["/dashboard/devices/pair"]} />
                 valid until {new Date(pair.expires_at).toLocaleString()} · single use
               </div>
               <Button

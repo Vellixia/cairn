@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -110,6 +112,7 @@ export default function DevicesTokensPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+        <InfoCard {...INFOCOPY["/dashboard/devices"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Device tokens</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -211,10 +214,12 @@ export default function DevicesTokensPage() {
 
           {issued && (
             <div className="mt-4 space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/devices"]} />
               <p className="text-xs text-muted-foreground">
                 Copy this token — it won&apos;t be shown again.
               </p>
               <div className="flex gap-2">
+        <InfoCard {...INFOCOPY["/dashboard/devices"]} />
                 <code className="flex-1 overflow-x-auto rounded-md border border-primary bg-secondary px-3 py-2 font-mono text-xs text-primary">
                   {issued.token}
                 </code>
@@ -251,6 +256,7 @@ export default function DevicesTokensPage() {
         <CardContent>
           {tokens.isLoading ? (
             <div className="space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/devices"]} />
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
               <Skeleton className="h-8 w-full" />
@@ -299,6 +305,7 @@ function TokensTable({
         <div>
           <div className="font-medium">{row.original.name}</div>
           <div className="font-mono text-[10px] text-muted-foreground">
+        <InfoCard {...INFOCOPY["/dashboard/devices"]} />
             {row.original.id.slice(0, 8)}
           </div>
         </div>
@@ -389,6 +396,7 @@ function TokensTable({
   return (
     <>
       <div className="overflow-x-auto rounded-md border border-line">
+        <InfoCard {...INFOCOPY["/dashboard/devices"]} />
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (

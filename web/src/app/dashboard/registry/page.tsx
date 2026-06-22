@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 // Pack registry UI (v0.5.0 Sprint 13). Three tabs:
 //   Browse   — list + search installed/published packs
 //   Publish  — drag-drop a `.cairnpkg` and POST to /registry/packs
@@ -86,6 +88,7 @@ export default function RegistryPage() {
 
   return (
     <div className="space-y-6">
+        <InfoCard {...INFOCOPY["/dashboard/registry"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Pack registry</h1>
         <p className="mt-1 text-sm text-muted-foreground">

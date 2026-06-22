@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +28,7 @@ export default function SessionsPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+        <InfoCard {...INFOCOPY["/dashboard/sessions"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Sessions</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -37,6 +40,7 @@ export default function SessionsPage() {
         <Skeleton className="h-72 w-full" />
       ) : sessions.data && sessions.data.length > 0 ? (
         <div className="space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/sessions"]} />
           {sessions.data.map((s) => (
             <Card key={s.id}>
               <CardHeader>

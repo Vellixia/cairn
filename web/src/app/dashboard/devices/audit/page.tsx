@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import {
   type ColumnDef,
   flexRender,
@@ -71,6 +73,7 @@ export default function AuditPage() {
   });
   return (
     <div className="space-y-6 max-w-3xl">
+        <InfoCard {...INFOCOPY["/dashboard/devices/audit"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Audit log</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -86,6 +89,7 @@ export default function AuditPage() {
         <CardContent>
           {audit.isLoading ? (
             <div className="space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/devices/audit"]} />
               <Skeleton className="h-6 w-full" />
               <Skeleton className="h-6 w-full" />
               <Skeleton className="h-6 w-full" />
@@ -94,6 +98,7 @@ export default function AuditPage() {
             <p className="text-sm text-muted-foreground">No events recorded yet.</p>
           ) : (
             <div className="rounded-md border border-line overflow-x-auto">
+        <InfoCard {...INFOCOPY["/dashboard/devices/audit"]} />
               <Table>
                 <TableHeader>
                   {table.getHeaderGroups().map((hg) => (

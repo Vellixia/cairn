@@ -10,6 +10,7 @@ import {
   type DeviceTokenMeta,
   type Health,
   type IssuedToken,
+  type LedgerEntry,
   type Me,
   type Memory,
   type PairCode,
@@ -51,6 +52,7 @@ export const qk = {
   devicesAudit: ["devices", "audit"] as const,
   pool: ["pool"] as const,
   shareExport: ["share", "export"] as const,
+  ledger: (limit: number) => ["ledger", limit] as const,
 };
 
 // ---- queries ----------------------------------------------------------------
@@ -133,6 +135,14 @@ export function useDevicesAuditQuery() {
     queryKey: qk.devicesAudit,
     queryFn: () => getJSON<AuditEvent[]>("/api/devices/audit"),
     refetchInterval: 5_000,
+  });
+}
+
+export function useLedgerQuery(limit = 200) {
+  return useQuery({
+    queryKey: qk.ledger(limit),
+    queryFn: () => getJSON<LedgerEntry[]>(`/api/ledger?limit=${limit}`),
+    refetchInterval: 30_000,
   });
 }
 

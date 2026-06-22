@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -54,6 +56,7 @@ export default function SanitizePage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+        <InfoCard {...INFOCOPY["/dashboard/share/sanitize"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Sanitize</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -134,6 +137,7 @@ export default function SanitizePage() {
             </ScrollArea>
             {result.findings.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
+        <InfoCard {...INFOCOPY["/dashboard/share/sanitize"]} />
                 {result.findings.map((f, i) => (
                   <Badge key={i} variant="outline" className="font-mono text-[10px]">
                     {f.kind} [{f.start}–{f.end}]

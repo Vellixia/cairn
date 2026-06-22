@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +41,7 @@ export default function RecallPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+        <InfoCard {...INFOCOPY["/dashboard/memory/recall"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Recall</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -95,6 +98,7 @@ export default function RecallPage() {
             <p className="text-sm text-muted-foreground">Search to see results.</p>
           ) : query.isLoading ? (
             <div className="space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/memory/recall"]} />
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />

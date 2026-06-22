@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller } from "react-hook-form";
@@ -39,6 +41,7 @@ export default function AnchorPage() {
   }
   return (
     <div className="space-y-6 max-w-2xl">
+        <InfoCard {...INFOCOPY["/dashboard/reliability/anchor"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Task anchor</h1>
         <p className="mt-1 text-sm text-muted-foreground">

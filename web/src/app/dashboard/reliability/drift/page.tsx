@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
@@ -61,6 +63,7 @@ export default function DriftCenterPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+        <InfoCard {...INFOCOPY["/dashboard/reliability/drift"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Drift center</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -82,6 +85,7 @@ export default function DriftCenterPage() {
         <CardContent>
           {drifts.isLoading ? (
             <div className="space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/reliability/drift"]} />
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />

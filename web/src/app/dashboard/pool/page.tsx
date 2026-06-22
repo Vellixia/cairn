@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,6 +30,7 @@ export default function PoolPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+        <InfoCard {...INFOCOPY["/dashboard/pool"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Pool</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -45,6 +48,7 @@ export default function PoolPage() {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-3">
+        <InfoCard {...INFOCOPY["/dashboard/pool"]} />
             <Button onClick={() => publish.mutate()} disabled={publish.isPending}>
               {publish.isPending
                 ? "Publishing…"
@@ -66,6 +70,7 @@ export default function PoolPage() {
         <CardContent>
           {pool.isLoading ? (
             <div className="space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/pool"]} />
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
             </div>
