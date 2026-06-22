@@ -1,4 +1,4 @@
-# Web dashboard (0.4.0)
+# Web dashboard (v0.5.0)
 
 The Cairn web dashboard is a single-admin console: one username + password,
 one httpOnly cookie session. CLI / MCP clients authenticate with **device
@@ -39,7 +39,7 @@ Cookie attributes: `HttpOnly; SameSite=Strict; Path=/; Max-Age=86400` (default),
 
 ### Bearer (CLI / MCP)
 
-Device tokens (HS256 JWTs) — the existing 0.3.x flow. Tokens carry `scope`
+Device tokens (HS256 JWTs) — unchanged since 0.4.0. Tokens carry `scope`
 (admin / write / read) and an optional `exp`. Token id is stored in the meta
 store; the bearer itself is never persisted in cleartext.
 
@@ -116,12 +116,12 @@ The admin can do everything the CLI could, from the dashboard:
   Same-store pattern as `cairn pair-code` — the claim endpoint signs a fresh
   JWT at claim time.
 
-## Prebuilt static export
+## Static export
 
-`web/out/` is committed so `cargo build` is hermetic — no Node toolchain
-required to ship the cairn binary. The CI `web:build` job runs
-`npm ci && npm run build` and uploads the result as a build artifact for
-cross-validation.
+`web/out/.gitkeep` ships so `cargo build` is hermetic — no Node toolchain
+required to build the cairn binary. The build.rs in `cairn-api` creates the
+directory if it's missing. The Docker build runs `npm run build` before
+compiling Rust so the container ships the full dashboard.
 
 To rebuild the dashboard from source:
 
@@ -131,8 +131,8 @@ npm ci
 npm run build          # writes web/out/
 ```
 
-Source maps under `_next/static/**/*.js.map` are excluded from git to keep
-the repo lighter.
+`web/out/` is gitignored except for `.gitkeep`. Build artifacts are never
+committed.
 
 ## Security headers
 

@@ -6,6 +6,11 @@ Tests run against the Docker-backed Cairn server (`http://localhost:7777`).
 **Test method**: Direct JSON-RPC over `cairn-cli mcp` stdio (fast, no AI model hang-ups)
 for tool tests. HTTP `Invoke-RestMethod` for API tests. CLI commands for setup/bench/sync.
 
+For the 0.5.0 release we also ship a **PowerShell scenario harness** at
+`scripts/e2e.ps1` covering 20 flows (memory, context, guardrails, sessions, sync,
+federation, registry, ingest, proactive, mobile companion). 67/69 assertions pass against
+a fresh `docker compose up`. See `docs/E2E.md` for the full list.
+
 ---
 
 ## Infrastructure
@@ -16,7 +21,7 @@ for tool tests. HTTP `Invoke-RestMethod` for API tests. CLI commands for setup/b
 | Cairn server | `http://localhost:7777` (HTTP, `CAIRN_INSECURE=1`) |
 | Device token | `opencode-test` (write scope) |
 | OpenCode MCP | `cairn` connected |
-| `cairn-cli.exe` | `~/.local/bin/cairn-cli.exe` v0.2.0 |
+| `cairn-cli.exe` | `~/.local/bin/cairn-cli.exe` v0.5.0 |
 | Workspace mount | Project mounted at `/workspace` (read-only) |
 
 ---

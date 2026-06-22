@@ -44,7 +44,7 @@ cd web && npm install && npm run dev   # :3000 → API on :7777
 
 ## Architecture
 
-14-crate Rust workspace (MSRV 1.80) + Next.js static-export web UI. Two binaries:
+22-crate Rust workspace (MSRV 1.80) + Next.js static-export web UI. Two binaries:
 
 | Binary | Crate | Purpose |
 |--------|-------|---------|

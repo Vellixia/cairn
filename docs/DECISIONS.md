@@ -918,5 +918,5 @@ registry HTTP API as `cairn-server`, so:
 - [SECURITY.md](../SECURITY.md) — threat model + hardening checklist (updated Sprint 15c)
 - [Roadmap](ROADMAP.md) — what's done, what's next
 - [Web](WEB.md) — admin/CLI auth split surface
-- [Upgrading](UPGRADING.md) — 0.3.x → 0.4.0 migration
+- [Upgrading](UPGRADING.md) — 0.4.0 → 0.5.0 migration
 - [Audit Report](audits/REPORT.md) — security findings that informed several of these decisions

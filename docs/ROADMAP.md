@@ -57,7 +57,7 @@ gantt
 
 | Item | Status | Notes |
 |---|---|---|
-| Cargo workspace + crate structure | Done | 14 crates |
+| Cargo workspace + crate structure | Done | 22 crates (8 added in 0.5.0: session, pack, registry, sync, bench, proactive, proxy, ingest) |
 | Next.js web app (admin console, sidebar dashboard) | Done | Static export, embedded via rust-embed; `web/out/.gitkeep` ships so the binary falls back to a built-in page |
 | Docker Compose stack (Cairn + HelixDB + MinIO) | Done | `docker compose up -d` |
 | CI pipeline (test/clippy/fmt) | Done | GitHub Actions |
@@ -219,7 +219,7 @@ The product is feature-complete enough to install and use. The remaining work is
 - [Plan](PLAN.md) — product vision and phases
 - [Architecture](ARCHITECTURE.md) — how it works today
 - [Web](WEB.md) — admin/CLI auth split, dashboard surface
-- [Upgrading](UPGRADING.md) — 0.3.x → 0.4.0 migration
+- [Upgrading](UPGRADING.md) — 0.4.0 → 0.5.0 migration
 - [Decisions](DECISIONS.md) — ADRs 001–027 (binary split through v0.5.0 Phase 5; ADR-015 superseded)
 - [Benchmarks](BENCHMARKS.md) — measured numbers (LongMemEval + horizon + retention, Sprint 16)
 - [Security](../SECURITY.md) — threat model + hardening checklist
