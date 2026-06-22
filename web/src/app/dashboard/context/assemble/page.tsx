@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -79,6 +81,7 @@ export default function AssemblePage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+        <InfoCard {...INFOCOPY["/dashboard/context/assemble"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Assemble</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -202,6 +205,7 @@ export default function AssemblePage() {
                       className="rounded-md border border-line bg-secondary/40 px-3 py-2 text-sm"
                     >
                       <div className="flex items-baseline gap-2">
+        <InfoCard {...INFOCOPY["/dashboard/context/assemble"]} />
                         <Badge variant="outline" className="font-mono text-[10px]">
                           {d.reason}
                         </Badge>

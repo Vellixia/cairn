@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import {
   Card,
   CardContent,
@@ -23,6 +25,7 @@ export default function WakeupPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+        <InfoCard {...INFOCOPY["/dashboard/memory/wakeup"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Wakeup</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -41,6 +44,7 @@ export default function WakeupPage() {
         <CardContent>
           {memories.isLoading ? (
             <div className="space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/memory/wakeup"]} />
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />
               <Skeleton className="h-12 w-full" />

@@ -1,175 +1,116 @@
 "use client";
 
-import Link from "next/link";
-import {
-  useStatsQuery,
-  useWakeupQuery,
-  useAnchorQuery,
-  useDevicesTokensQuery,
-} from "@/lib/queries";
-import { getJSON } from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
-import { KpiCard } from "@/components/KpiCard";
-import { HealthRow } from "@/components/HealthRow";
-import { ActivityTimeline } from "@/components/ActivityTimeline";
-import { SavingsChart } from "@/components/SavingsChart";
-import { DriftAnchorCard } from "@/components/DriftAnchorCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Item, ItemContent, ItemTitle, ItemDescription } from "@/components/ui/item";
-import { Brain, Plug, ShieldCheck, Network } from "lucide-react";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { OverviewContent } from "./OverviewContent";
+import { HubTabs, type HubTab } from "@/components/HubTabs";
+import MemoryPage from "./memory/page";
+import RecallPage from "./memory/recall/page";
+import WakeupPage from "./memory/wakeup/page";
+import MemoryGraphPage from "./memory/graph/page";
+import ContextInspectorPage from "./context/page";
+import AssemblePage from "./context/assemble/page";
+import SavingsPage from "./savings/page";
+import ReliabilityScorePage from "./reliability/page";
+import AnchorPage from "./reliability/anchor/page";
+import CheckpointsPage from "./reliability/checkpoints/page";
+import DriftCenterPage from "./reliability/drift/page";
+import SanitizePage from "./share/sanitize/page";
+import BundlePage from "./share/export/page";
+import PoolPage from "./pool/page";
+import RegistryPage from "./registry/page";
+import ProfilePage from "./profile/page";
+import DevicesTokensPage from "./devices/page";
+import PairCodePage from "./devices/pair/page";
+import AuditPage from "./devices/audit/page";
+import SessionsPage from "./sessions/page";
+import SettingsPage from "./settings/page";
 
-interface SavingsSnapshot {
-  compact_bytes?: number;
-  full_bytes?: number;
-  saved_bytes?: number;
-  saved_ratio?: number;
-  calls?: number;
-  hits?: number;
-  bounces?: number;
-  hit_rate?: number;
-  bounce_rate?: number;
-  wakeup_tokens?: number;
-  recall_tokens?: number;
-}
-interface MetricsResponse {
-  savings?: SavingsSnapshot;
-  usd_saved?: number;
-}
+const MEMORY_TABS: HubTab[] = [
+  { id: "remember", label: "Remember", content: <MemoryPage /> },
+  { id: "recall", label: "Recall", content: <RecallPage /> },
+  { id: "wakeup", label: "Wakeup", content: <WakeupPage /> },
+  { id: "graph", label: "Graph", content: <MemoryGraphPage /> },
+  { id: "inspector", label: "Inspector", content: <ContextInspectorPage /> },
+  { id: "assemble", label: "Assemble", content: <AssemblePage /> },
+  { id: "savings", label: "Savings", content: <SavingsPage /> },
+];
 
-export default function DashboardOverviewPage() {
-  const stats = useStatsQuery();
-  const memories = useWakeupQuery(5);
-  const anchor = useAnchorQuery();
-  const devices = useDevicesTokensQuery();
-  const metrics = useQuery({
-    queryKey: ["dashboard", "metrics"],
-    queryFn: () => getJSON<MetricsResponse>("/api/metrics"),
-    refetchInterval: 30_000,
-  });
-  const rel = stats.data?.reliability;
-  const tokensSaved = metrics.data?.savings?.wakeup_tokens ?? 0;
-  const tokensSavedRecall = metrics.data?.savings?.recall_tokens ?? 0;
-  const tokensSavedTotal = tokensSaved + tokensSavedRecall;
-  const activeDeviceCount = devices.data?.length ?? null;
+const TRUST_TABS: HubTab[] = [
+  { id: "score", label: "Score", content: <ReliabilityScorePage /> },
+  { id: "anchor", label: "Anchor", content: <AnchorPage /> },
+  { id: "checkpoints", label: "Checkpoints", content: <CheckpointsPage /> },
+  { id: "drift", label: "Drift", content: <DriftCenterPage /> },
+  { id: "sanitize", label: "Sanitize", content: <SanitizePage /> },
+  { id: "bundles", label: "Bundles", content: <BundlePage /> },
+  { id: "pool", label: "Pool", content: <PoolPage /> },
+  { id: "registry", label: "Registry", content: <RegistryPage /> },
+];
+
+const YOU_TABS: HubTab[] = [
+  { id: "profile", label: "Profile", content: <ProfilePage /> },
+  { id: "tokens", label: "Tokens", content: <DevicesTokensPage /> },
+  { id: "pair", label: "Pair", content: <PairCodePage /> },
+  { id: "audit", label: "Audit", content: <AuditPage /> },
+  { id: "sessions", label: "Sessions", content: <SessionsPage /> },
+  { id: "settings", label: "Settings", content: <SettingsPage /> },
+];
+
+function DashboardPageInner() {
+  const params = useSearchParams();
+  const view = params.get("view");
+
+  if (view === "memory") {
+    return (
+      <HubTabs
+        view="memory"
+        title="Memory & Context"
+        description="Write, recall, and read — the core loop. Plus the byte-savings ledger that proves it works."
+        tabs={MEMORY_TABS}
+        defaultTab="remember"
+      />
+    );
+  }
+  if (view === "trust") {
+    return (
+      <HubTabs
+        view="trust"
+        title="Trust"
+        description="Reliability, the drift center, and the way memories leave this Cairn."
+        tabs={TRUST_TABS}
+        defaultTab="score"
+      />
+    );
+  }
+  if (view === "you") {
+    return (
+      <HubTabs
+        view="you"
+        title="You"
+        description="Your profile, your devices, your sessions."
+        tabs={YOU_TABS}
+        defaultTab="profile"
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Now</h1>
         <p className="text-sm text-muted-foreground">
           Server health, reliability, recent memory, and the last few admin actions — at a glance.
         </p>
       </header>
-
-      <section
-        aria-label="Key performance indicators"
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-      >
-        <KpiCard
-          label="Memories"
-          value={stats.data ? stats.data.memories : null}
-          href="/dashboard/memory"
-          icon={Brain}
-          hint={
-            anchor.data?.anchor
-              ? "Stored under current anchor"
-              : "Set an anchor to scope recall"
-          }
-          tone={anchor.data?.anchor ? "positive" : "neutral"}
-        />
-        <KpiCard
-          label="Reliability"
-          value={rel ? rel.score : null}
-          suffix={rel ? "/100" : undefined}
-          href="/dashboard/reliability"
-          icon={ShieldCheck}
-          hint={
-            rel
-              ? `${rel.samples} samples · ${rel.ok} ok · ${rel.warn} warn`
-              : "No edit history yet"
-          }
-          tone={
-            !rel
-              ? "neutral"
-              : rel.score >= 90
-                ? "positive"
-                : rel.score >= 70
-                  ? "warning"
-                  : "danger"
-          }
-        />
-        <KpiCard
-          label="Token savings"
-          value={metrics.data ? tokensSavedTotal : null}
-          icon={Plug}
-          hint={
-            metrics.data
-              ? `Wakeup ${tokensSaved.toLocaleString()} · Recall ${tokensSavedRecall.toLocaleString()}`
-              : "Last 7 days · see chart"
-          }
-          tone={tokensSavedTotal > 0 ? "positive" : "info"}
-        />
-        <KpiCard
-          label="Active devices"
-          value={activeDeviceCount}
-          href="/dashboard/devices"
-          icon={Network}
-          hint="Issued device tokens"
-          tone={activeDeviceCount && activeDeviceCount > 0 ? "positive" : "neutral"}
-        />
-      </section>
-
-      <HealthRow />
-
-      <section className="grid gap-4 lg:grid-cols-2">
-        <ActivityTimeline limit={8} />
-        <SavingsChart />
-      </section>
-
-      <DriftAnchorCard />
-
-      <Card className="p-5">
-        <CardHeader className="p-0">
-          <CardTitle className="text-sm font-semibold tracking-tight">Recent memory</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0 pt-4">
-          {memories.isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </div>
-          ) : memories.data && memories.data.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No memories yet.{" "}
-              <Link
-                href="/dashboard/memory"
-                className="text-[hsl(var(--color-info))] hover:underline"
-              >
-                Capture the first one →
-              </Link>
-            </p>
-          ) : memories.data ? (
-            <ul className="space-y-1.5">
-              {memories.data.slice(0, 5).map((m) => (
-                <Item key={m.id} variant="outline" size="sm">
-                  <ItemContent>
-                    <ItemTitle className="line-clamp-2">{m.content}</ItemTitle>
-                    <ItemDescription>
-                      <Badge variant="outline" className="mr-1.5 font-mono text-[10px]">
-                        {m.kind}
-                      </Badge>
-                      {m.tier} · {new Date(m.created_at).toLocaleString()}
-                    </ItemDescription>
-                  </ItemContent>
-                </Item>
-              ))}
-            </ul>
-          ) : null}
-        </CardContent>
-      </Card>
+      <OverviewContent />
     </div>
+  );
+}
+
+export default function DashboardOverviewPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardPageInner />
+    </Suspense>
   );
 }

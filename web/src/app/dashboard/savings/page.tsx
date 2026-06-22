@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useQuery } from "@tanstack/react-query";
 import {
   Card,
@@ -61,6 +63,7 @@ export default function SavingsPage() {
 
   return (
     <div className="space-y-6">
+        <InfoCard {...INFOCOPY["/dashboard/savings"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Savings &amp; recover</h1>
         <p className="mt-1 text-sm text-muted-foreground">

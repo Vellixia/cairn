@@ -274,3 +274,14 @@ export interface AuditEvent {
   actor: string;
   detail: string;
 }
+
+export interface LedgerEntry {
+  id: number;
+  ts: string;
+  source: string;
+  bytes_in: number;
+  bytes_out: number;
+  tokens_saved: number;
+  cost_usd_saved: number;
+  signature: string;
+}

@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -57,6 +59,7 @@ export default function MemoryGraphPage() {
 
   return (
     <div className="space-y-6">
+        <InfoCard {...INFOCOPY["/dashboard/memory/graph"]} />
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Memory graph</h1>

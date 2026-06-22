@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +37,7 @@ export default function BundlePage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+        <InfoCard {...INFOCOPY["/dashboard/share/export"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Bundles</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -57,6 +60,7 @@ export default function BundlePage() {
           </Button>
           {build.isPending && (
             <div className="space-y-2">
+        <InfoCard {...INFOCOPY["/dashboard/share/export"]} />
               <Skeleton className="h-4 w-3/4" />
               <Skeleton className="h-4 w-1/2" />
             </div>
@@ -83,6 +87,7 @@ export default function BundlePage() {
 function Stat({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex justify-between border-b border-dashed border-line py-1">
+        <InfoCard {...INFOCOPY["/dashboard/share/export"]} />
       <span className="text-muted-foreground">{k}</span>
       <span className="font-mono text-teal">{v}</span>
     </div>

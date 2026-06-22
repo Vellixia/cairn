@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+        <InfoCard {...INFOCOPY["/dashboard/settings"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -68,6 +71,7 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground">Loading…</p>
           )}
           <div className="mt-4 flex gap-2">
+        <InfoCard {...INFOCOPY["/dashboard/settings"]} />
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="destructive" disabled={logout.isPending}>

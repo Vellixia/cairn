@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoCard } from "@/components/InfoCard";
+import { INFOCOPY } from "@/components/infocopy";
 import {
   Card,
   CardContent,
@@ -16,6 +18,7 @@ export default function ReliabilityScorePage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+        <InfoCard {...INFOCOPY["/dashboard/reliability"]} />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Reliability</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -91,7 +94,9 @@ function Cell({
 }) {
   return (
     <div className="rounded-md bg-secondary px-3 py-2">
+        <InfoCard {...INFOCOPY["/dashboard/reliability"]} />
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <InfoCard {...INFOCOPY["/dashboard/reliability"]} />
         {label}
       </div>
       <div className={`font-mono ${accent ?? ""}`}>{value}</div>

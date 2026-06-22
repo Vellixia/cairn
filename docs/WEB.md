@@ -66,17 +66,39 @@ Every request goes through `auth()` (in `crates/cairn-api/src/lib.rs`):
 
 ## Dashboard surface
 
-### Layout (Sprint 25)
+### Layout (Sprint 26)
 
-- Left rail: **collapsible** sidebar with 8 groups — **Now** (static label,
-  never collapses) / Memory / Context / Reliability / Share / Personalization
-  / Devices / System. Group state persists per-browser in `localStorage`
-  under the key `cairn-sidebar-v1`. Default state: Now + Memory open, rest
-  collapsed. `aria-current="page"` on the active item.
+- Left rail: **flat** sidebar with 4 entries — **Now** (static label) /
+  Memory & Context / Trust / You. State persists per-browser in
+  `localStorage` under the key `cairn-sidebar-v2`. Migration from `v1`:
+  unknown ids dropped; no group-open state is preserved. `aria-current="page"`
+  on the active item, with `?view=` and `?tab=` query awareness.
+- Each hub is a **single page** (`/dashboard?view=<hub>&tab=<sub>`) that
+  renders its sub-views as inline tabs. The 21 deep-link routes
+  (`/dashboard/memory`, `/dashboard/reliability/anchor`, etc.) still exist
+  for direct linking. Browser back/forward navigates between tabs.
 - Top: ⌘K trigger + server health pill + reliability score + profile chip.
-- Center: per-section routes (Next.js App Router).
+- Center: per-hub tabs on `≥md`; collapses to a `<select>` on `<md` for
+  mobile fallback.
 - Right-bottom: toast tray with `aria-live="polite"` and `role="alert"` for
   errors.
+
+#### InfoCard pattern (Sprint 26)
+
+Each of the 21 sub-routes renders an inline `InfoCard` at the top of its
+content, keyed by route in `web/src/components/infocopy.ts`. The card has
+three blocks:
+
+- **What this is** — one-sentence purpose.
+- **How to use it** — 1-3 bullets of the smallest action that works.
+- **Impact on Cairn** — concrete downstream effect (tokens, reliability,
+  memory, savings).
+
+Cards are **dismissible per session** via a `Hide help` button. Dismissal
+is stored in `sessionStorage` under `cairn-infocard-dismissed-v1` with the
+key derived from the first 40 characters of the `what` string. A compact
+`?` button in the card's top-right restores the card (`Show help for this
+section`); both buttons carry `aria-live="polite"`.
 
 ### Overview page (`/dashboard`)
 
@@ -94,7 +116,20 @@ Signal-dense landing page composed of:
    `PiggyBank` icon when ledger is empty.
 5. **DriftAnchorCard** — current task anchor (read + edit) + reliability
    summary + link to the drift center.
-6. **Recent memory** — last 5 wakeup memories from `/api/memory/wakeup`.
+6. **TokensSavedHeadline** — `saved_bytes` from `/api/metrics` rendered as a
+   large number with an arrow delta vs the prior 7 days (computed
+   client-side from `/api/ledger?limit=1000`).
+7. **ReliabilitySparkline** — 30-sample savings sparkline (Recharts
+   `LineChart`) over the last 30 minutes, normalized to 0-100 across the
+   visible window.
+8. **MemoryTierDonut** — Recharts `PieChart` grouped by `tier` from
+   `/api/memory/wakeup?limit=200`.
+9. **SourceMixBar** — plain-CSS horizontal stacked bar over the last 7
+   days, grouped by `source` from `/api/ledger?limit=500` (no Recharts,
+   keeps the bundle lean).
+10. **LastAdminActionCard** — newest entry from `/api/devices/audit`, with
+    actor, kind, detail, and relative time.
+11. **Recent memory** — last 5 wakeup memories from `/api/memory/wakeup`.
 
 ### Keyboard
 
