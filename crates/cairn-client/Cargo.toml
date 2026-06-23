@@ -1,13 +1,13 @@
 [package]
-name = "cairn-cli"
-description = "The Cairn client CLI (the `cairn-cli` binary). Connects agents and runs local tools."
+name = "cairn-client"
+description = "The Cairn client binary (`cairn`). Connects agents to a Docker-hosted Cairn server."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [[bin]]
-name = "cairn-cli"
+name = "cairn"
 path = "src/main.rs"
 
 [features]

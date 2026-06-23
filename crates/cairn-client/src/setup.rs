@@ -1,19 +1,19 @@
-//! `cairn-cli setup [agent|--all]` — wire AI agents up to a Cairn server.
+﻿//! `cairn setup [agent|--all]` â€” wire AI agents up to a Cairn server.
 //!
 //! Every merge is **non-destructive**: existing config is preserved and our entries are added
 //! idempotently (running twice changes nothing). Each agent is configured in its own native
 //! format:
 //!
-//! - **Claude Code** — project `.mcp.json` (the `cairn-cli` MCP server) **and** `.claude/settings.json`
+//! - **Claude Code** â€” project `.mcp.json` (the `cairn` MCP server) **and** `.claude/settings.json`
 //!   lifecycle hooks.
-//! - **Cursor** — project `.cursor/mcp.json` (`mcpServers` schema).
-//! - **VS Code** — project `.vscode/mcp.json` (`servers` schema).
-//! - **Windsurf** — `~/.codeium/windsurf/mcp_config.json` (`mcpServers` schema).
-//! - **OpenCode** — `%APPDATA%\OpenCode\opencode.json` on Windows, `~/.config/opencode/opencode.json`
+//! - **Cursor** â€” project `.cursor/mcp.json` (`mcpServers` schema).
+//! - **VS Code** â€” project `.vscode/mcp.json` (`servers` schema).
+//! - **Windsurf** â€” `~/.codeium/windsurf/mcp_config.json` (`mcpServers` schema).
+//! - **OpenCode** â€” `%APPDATA%\OpenCode\opencode.json` on Windows, `~/.config/opencode/opencode.json`
 //!   on Unix (`mcp` top-level key with `{ type, command, environment, enabled }` entries).
 //!
 //! When `--server` is passed, the MCP server entry includes `CAIRN_SERVER` and `CAIRN_TOKEN` env
-//! vars so `cairn-cli mcp` runs in remote-proxy mode; otherwise it runs in local HelixDB mode.
+//! vars so `cairn mcp` runs in remote-proxy mode; otherwise it runs in local HelixDB mode.
 //!
 //! `--all` configures only the agents it actually detects (project markers or home-dir install);
 //! naming an agent explicitly configures it regardless.
@@ -43,8 +43,8 @@ pub fn run(
             }
         }
         if configured == 0 {
-            println!("cairn-cli: no supported agents detected here or in your home directory.");
-            println!("Install one explicitly, e.g. `cairn-cli setup claude-code`.");
+            println!("cairn: no supported agents detected here or in your home directory.");
+            println!("Install one explicitly, e.g. `cairn setup claude-code`.");
             println!("Supported: {}.", KNOWN.join(", "));
         } else {
             println!("\nStart the server with `cairn serve`, then open a session in your agent.");
@@ -164,11 +164,11 @@ fn install_opencode(server: Option<&str>, token: Option<&str>) -> Result<()> {
         env.insert("CAIRN_TOKEN".into(), json!(t));
     }
 
-    // Use an absolute path to the current cairn-cli binary so the OpenCode
+    // Use an absolute path to the current cairn binary so the OpenCode
     // launcher can find it regardless of PATH.
     let cli_exe = std::env::current_exe()
         .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| "cairn-cli".into());
+        .unwrap_or_else(|_| "cairn".into());
 
     let entry = if env.is_empty() {
         json!({
@@ -201,9 +201,9 @@ fn cairn_server(server: Option<&str>, token: Option<&str>) -> Value {
         env.insert("CAIRN_TOKEN".into(), json!(t));
     }
     if env.is_empty() {
-        json!({ "command": "cairn-cli", "args": ["mcp"] })
+        json!({ "command": "cairn", "args": ["mcp"] })
     } else {
-        json!({ "command": "cairn-cli", "args": ["mcp"], "env": Value::Object(env) })
+        json!({ "command": "cairn", "args": ["mcp"], "env": Value::Object(env) })
     }
 }
 
@@ -216,7 +216,7 @@ fn install_mcp_only(
 ) -> Result<()> {
     merge_mcp_server(path, schema_key, server, token)?;
     println!("\u{2713} Configured {label}:");
-    println!("  - {}  (MCP server: cairn-cli)", path.display());
+    println!("  - {}  (MCP server: cairn)", path.display());
     Ok(())
 }
 
@@ -248,25 +248,25 @@ fn install_claude_code(dir: &Path, server: Option<&str>, token: Option<&str>) ->
             .or_insert_with(|| json!({}))
             .as_object_mut()
             .context("settings.json: hooks is not an object")?;
-        add_hook(hooks, "SessionStart", "cairn-cli hook SessionStart", None);
+        add_hook(hooks, "SessionStart", "cairn hook SessionStart", None);
         add_hook(
             hooks,
             "UserPromptSubmit",
-            "cairn-cli hook UserPromptSubmit",
+            "cairn hook UserPromptSubmit",
             None,
         );
         add_hook(
             hooks,
             "PostToolUse",
-            "cairn-cli hook PostToolUse",
+            "cairn hook PostToolUse",
             Some("Edit|Write|MultiEdit|NotebookEdit"),
         );
-        add_hook(hooks, "SessionEnd", "cairn-cli hook SessionEnd", None);
+        add_hook(hooks, "SessionEnd", "cairn hook SessionEnd", None);
     }
     write_json(&settings_path, &Value::Object(settings))?;
 
     println!("\u{2713} Configured Claude Code:");
-    println!("  - {}  (MCP server: cairn-cli)", mcp_path.display());
+    println!("  - {}  (MCP server: cairn)", mcp_path.display());
     println!(
         "  - {}  (hooks: SessionStart, UserPromptSubmit, PostToolUse, SessionEnd)",
         settings_path.display()
@@ -351,7 +351,7 @@ mod tests {
         let starts = settings["hooks"]["SessionStart"].as_array().unwrap();
         let cairn_count = starts
             .iter()
-            .filter(|g| g["hooks"][0]["command"] == "cairn-cli hook SessionStart")
+            .filter(|g| g["hooks"][0]["command"] == "cairn hook SessionStart")
             .count();
         assert_eq!(cairn_count, 1);
         assert!(starts.iter().any(|g| g["hooks"][0]["command"] == "echo hi"));
@@ -359,10 +359,10 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|g| g["hooks"][0]["command"] == "cairn-cli hook PostToolUse"));
+            .any(|g| g["hooks"][0]["command"] == "cairn hook PostToolUse"));
 
         let mcp = read_json(&dir.path().join(".mcp.json"));
-        assert_eq!(mcp["mcpServers"]["cairn"]["command"], "cairn-cli");
+        assert_eq!(mcp["mcpServers"]["cairn"]["command"], "cairn");
     }
 
     #[test]
@@ -372,12 +372,12 @@ mod tests {
 
         install_agent("cursor", p, None, None, None).unwrap();
         let cursor = read_json(&p.join(".cursor/mcp.json"));
-        assert_eq!(cursor["mcpServers"]["cairn"]["command"], "cairn-cli");
+        assert_eq!(cursor["mcpServers"]["cairn"]["command"], "cairn");
         assert_eq!(cursor["mcpServers"]["cairn"]["args"][0], "mcp");
 
         install_agent("vscode", p, None, None, None).unwrap();
         let vscode = read_json(&p.join(".vscode/mcp.json"));
-        assert_eq!(vscode["servers"]["cairn"]["command"], "cairn-cli");
+        assert_eq!(vscode["servers"]["cairn"]["command"], "cairn");
         assert!(vscode.get("mcpServers").is_none());
     }
 
@@ -393,7 +393,7 @@ mod tests {
 
         let v = read_json(&cfg);
         assert_eq!(v["mcpServers"]["other"]["command"], "x");
-        assert_eq!(v["mcpServers"]["cairn"]["command"], "cairn-cli");
+        assert_eq!(v["mcpServers"]["cairn"]["command"], "cairn");
     }
 
     #[test]
@@ -404,7 +404,7 @@ mod tests {
         install_opencode_with_path(Some("http://example.com:7777"), Some("tok-123"), &cfg).unwrap();
 
         let v = read_json(&cfg);
-        assert_eq!(v["mcp"]["cairn"]["command"][0], "cairn-cli");
+        assert_eq!(v["mcp"]["cairn"]["command"][0], "cairn");
         assert_eq!(v["mcp"]["cairn"]["command"][1], "mcp");
         assert_eq!(v["mcp"]["cairn"]["type"], "local");
         assert_eq!(v["mcp"]["cairn"]["enabled"], true);
@@ -423,7 +423,7 @@ mod tests {
         install_opencode_with_path(None, None, &cfg).unwrap();
 
         let v = read_json(&cfg);
-        assert_eq!(v["mcp"]["cairn"]["command"][0], "cairn-cli");
+        assert_eq!(v["mcp"]["cairn"]["command"][0], "cairn");
         assert!(v["mcp"]["cairn"]["environment"].is_null());
     }
 
@@ -447,13 +447,13 @@ mod tests {
         let entry = if env.is_empty() {
             json!({
                 "type": "local",
-                "command": ["cairn-cli", "mcp"],
+                "command": ["cairn", "mcp"],
                 "enabled": true
             })
         } else {
             json!({
                 "type": "local",
-                "command": ["cairn-cli", "mcp"],
+                "command": ["cairn", "mcp"],
                 "environment": Value::Object(env),
                 "enabled": true
             })

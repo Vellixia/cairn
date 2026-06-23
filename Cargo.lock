@@ -524,7 +524,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cairn-cli"
+name = "cairn-client"
 version = "0.5.0"
 dependencies = [
  "anyhow",

@@ -1,4 +1,4 @@
-//! The `cairn` server binary.
+﻿//! The `cairn` server binary.
 //!
 //! `cairn serve` starts the HTTP API + embedded web UI. `cairn token` and `cairn pair-code`
 //! operate directly on the server's local store for host administration.
@@ -14,7 +14,7 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "cairn",
     version,
-    about = "Cairn server — context & reliability layer for AI agents"
+    about = "Cairn server â€” context & reliability layer for AI agents"
 )]
 struct Cli {
     /// Override the data directory (defaults to the OS data dir; use /data in Docker).
@@ -54,7 +54,7 @@ enum Cmd {
 enum AdminCmd {
     /// Rotate the admin password. Reads the new password from CAIRN_ADMIN_PASSWORD (env) or
     /// stdin. Bumps the admin generation so every existing cookie session is invalidated.
-    /// Refused on non-loopback binds — same pattern as the TLS gate.
+    /// Refused on non-loopback binds â€” same pattern as the TLS gate.
     Password,
     /// Delete the admin record. The next loopback visit to /setup creates a new admin.
     /// Refused on non-loopback binds. Use this when the password is lost.
@@ -100,7 +100,7 @@ mod pair {
 
         println!("{code}");
         eprintln!(
-            "Pairing code for '{name}' (valid 10 min). On the new device run:\n    cairn-cli pair {code} --server http://<this-host>:7777"
+            "Pairing code for '{name}' (valid 10 min). On the new device run:\n    cairn pair {code} --server http://<this-host>:7777"
         );
         Ok(())
     }
@@ -134,12 +134,12 @@ async fn main() -> anyhow::Result<()> {
                 .parse()
                 .with_context(|| format!("invalid address {host}:{port}"))?;
             let scheme = if cfg.tls.is_some() { "https" } else { "http" };
-            println!("🪨  Cairn serving on {scheme}://{addr}");
+            println!("ðŸª¨  Cairn serving on {scheme}://{addr}");
             println!("    data dir: {}", cfg.data_dir().display());
             if cfg.tls.is_some() {
                 println!("    TLS: enabled (CAIRN_TLS_CERT / CAIRN_TLS_KEY)");
             } else if cfg.insecure {
-                eprintln!("    WARNING: CAIRN_INSECURE=1 — serving plain HTTP on a non-loopback address. Do not use this on a public network.");
+                eprintln!("    WARNING: CAIRN_INSECURE=1 â€” serving plain HTTP on a non-loopback address. Do not use this on a public network.");
             } else if !cfg.is_loopback_host() {
                 anyhow::bail!(
                     "refusing to serve on non-loopback address {addr} without TLS. \
@@ -232,7 +232,7 @@ mod admin {
         let mut s = String::new();
         if io::stdin().is_terminal() {
             // Best-effort echo suppression. On Windows there's no portable raw-mode API in std,
-            // so we just read and emit a newline after — adequate for the admin recovery flow.
+            // so we just read and emit a newline after â€” adequate for the admin recovery flow.
             io::stdin()
                 .read_line(&mut s)
                 .context("reading password from stdin")?;
@@ -287,7 +287,7 @@ mod admin {
         } else {
             println!(
                 "admin deleted. Visit /setup on loopback to create a new admin. \
-                 (The data dir may still contain a tombstone; that's fine — reads treat it as absent.)"
+                 (The data dir may still contain a tombstone; that's fine â€” reads treat it as absent.)"
             );
         }
         Ok(())
