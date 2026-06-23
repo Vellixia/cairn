@@ -4,17 +4,10 @@ Key decisions made during Cairn's development, with rationale. Ordered by recenc
 
 ```mermaid
 graph LR
-    Design["Design phase"]
-    ADR007["ADR-007<br/>HelixDB as datastore"]
-    ADR008["ADR-008<br/>Bench built into CLI"]
-    ADR009["ADR-009<br/>Rust + self-hosted"]
-
-    ADR001["ADR-001<br/>Binary split"]
-    ADR002["ADR-002<br/>OpenCode XDG path"]
-    ADR003["ADR-003<br/>tools/list object shape"]
-    ADR004["ADR-004<br/>CAIRN_INSECURE"]
-    ADR005["ADR-005<br/>Remote proxy path rewriting"]
-    ADR006["ADR-006<br/>install to setup rename"]
+    ADR027["ADR-027<br/>cairn.sh reverse proxy is its own crate"]
+    ADR028["ADR-028<br/>Drop Cursor/VSCode/Windsurf; add Codex CLI"]
+    ADR029["ADR-029<br/>Delete cairn-server crate; entrypoint in cairn-api"]
+    ADR030["ADR-030<br/>Rename cairn-cli → cairn; crate → cairn-client"]
 
     Design --> ADR007
     Design --> ADR008
@@ -26,6 +19,10 @@ graph LR
     ADR003 --> ADR004
     ADR004 --> ADR005
     ADR005 --> ADR006
+
+    ADR026 --> ADR028
+    ADR027 --> ADR029
+    ADR029 --> ADR030
 ```
 
 ---
@@ -916,11 +913,192 @@ registry HTTP API as `cairn-server`, so:
 
 ---
 
+## ADR-028: Drop Cursor / VS Code / Windsurf agents; support Claude Code + Codex CLI + OpenCode
+
+**Date:** 2026-06-23 (v0.6.0)  
+**Status:** Accepted
+
+### Context
+v0.5.0 supported six agent integrations: Claude Code, OpenCode, Cursor,
+VS Code (Copilot), Windsurf, and Cline. Each integration added a
+detect-arm in `cairn doctor`, a code path in `cairn setup` to write
+the agent's MCP config, a hook registration in `cairn rules`, and
+per-agent test fixtures.
+
+The proliferation drove bugs: Cursor's MCP schema changed twice in
+2025; Windsurf's in-product MCP tab overwrites manual edits on
+restart; VS Code's `mcp.json` is owned by the Copilot Chat extension,
+not VS Code core, and pinning the extension version was fragile.
+
+Meanwhile Codex CLI's MCP integration is the only third-party
+surface that matches the stdio-MCP model in the OpenAI Agents SDK
+reference implementation, verified against the `openai/codex` source
+tree:
+
+```toml
+# ~/.codex/config.toml (per-project: <project>/.codex/config.toml)
+[mcp_servers.cairn]
+command = "cairn"
+args    = ["mcp"]
+
+[mcp_servers.cairn.env]
+CAIRN_SERVER = "http://your-host:7777"
+CAIRN_TOKEN  = "<device-jwt>"
+```
+
+### Decision
+Restrict `KNOWN` agents to three:
+
+- `claude-code` — primary, full hook + MCP + rules surface
+- `codex`      — MCP stdio, optional `[mcp_servers.cairn.env]`
+- `opencode`   — MCP stdio via XDG config
+
+Removed: `cursor`, `vscode` (Copilot), `windsurf`, `cline`.
+
+### Rationale
+- Three integrations cover the three major agent runtimes
+  (Anthropic, OpenAI, OpenCode's own reference implementation).
+- Codex is the new addition: their stdio-MCP config schema is
+  identical to OpenCode's, so the existing TOML serializer reuses
+  one code path with a sentinel-based skip heuristic (sub-block
+  bodies are skipped via a `<<CAIRN_SKIP>>` marker because TOML has
+  no per-key "exists?" check).
+- Cursor/VSCode/Windsurf users can still install `cairn` and
+  register it manually in their agent's MCP panel — the loss is
+  the auto-setup, not the capability.
+
+### Trade-offs
+- Users on Cursor/VSCode/Windsurf lose the one-command setup. They
+  can still run `cairn mcp` manually and paste the JSON into their
+  agent's MCP panel. Documented in `docs/UPGRADING.md` for v0.5.0
+  → v0.6.0.
+- Future addition of a new agent is now a small PR: add to
+  `KNOWN`, add a detect-arm in `doctor.rs`, add a merge function
+  in `setup.rs`. No cross-agent scaffolding to inherit.
+
+---
+
+## ADR-029: Delete the `cairn-server` crate; in-container server is `cairn-api::bin::cairn-server`
+
+**Date:** 2026-06-23 (v0.6.0)  
+**Status:** Accepted
+
+### Context
+v0.5.0 had two server crates: `cairn-server` (the long-lived HTTP
+server, axum) and `cairn-api` (the route handlers, embedded web UI,
+and an unused `cairn-api::bin::cairn-api` debug binary).
+
+The split was historical: in v0.3.0 the server was a single-crate
+binary and `cairn-api` was extracted in v0.4.0 to share types with
+the `cairn mcp` code. The `cairn-server` crate became a thin
+wrapper that loaded config, opened the store, called
+`cairn_api::serve(addr, state)`, and exited when the store closed.
+
+That wrapper was ~50 LOC and added no value beyond a second
+`Cargo.toml` member. The name collision (`cairn` for both server
+and client) was a recurring source of confusion in the docs,
+`AGENTS.md`, the install scripts, and the GitHub Actions release
+matrix.
+
+### Decision
+- Delete the `cairn-server` crate entirely (Cargo.toml, lib.rs,
+  main.rs, pair.rs). Drop it from `[workspace.members]` and
+  `[workspace.dependencies]`.
+- Move the entrypoint to `cairn-api/src/bin/cairn_server.rs` and
+  declare it via `[[bin]] name = "cairn-server"` in
+  `cairn-api/Cargo.toml`.
+- The `cairn-api` crate gains `anyhow` and `tracing-subscriber` as
+  direct deps (used only by the bin).
+- The Docker image's `ENTRYPOINT` is now `["cairn-server"]` (was
+  `["cairn"]`).
+- The host tarball ships exactly one binary: `cairn` (from
+  `cairn-client`). The `release.yml` matrix drops the second
+  `bin` entry.
+
+### Rationale
+- One server binary, one client binary, no name collision.
+- `cairn-api` was already the de-facto server surface; the
+  `cairn-server` wrapper was a relic.
+- The release matrix shrinks from `bin: cairn,cairn-cli` to
+  `bin: cairn`. The CI build that produced the duplicate
+  `cairn-server` artifact for the host tarball is gone.
+
+### Trade-offs
+- The `cairn-api` crate now has a `[[bin]]` declaration in
+  addition to its library target. Minor Cargo idiom change.
+- Anyone running `cargo run -p cairn-server -- serve` locally
+  must switch to `cargo run -p cairn-api --bin cairn-server --
+  serve`. Documented in `CONTRIBUTING.md`.
+
+---
+
+## ADR-030: Rename `cairn-cli` → `cairn` (host binary); `crates/cairn-cli/` → `crates/cairn-client/`
+
+**Date:** 2026-06-23 (v0.6.0)  
+**Status:** Accepted
+
+### Context
+v0.5.0 had the host binary called `cairn-cli` and the crate called
+`cairn-cli`. The name collided with:
+
+- The pre-v0.4.0 single-binary name (`cairn`), which is what most
+  users remember and what the install scripts still print.
+- The MCP config convention of `command: "cairn"` — every agent's
+  MCP JSON ended up referencing the wrong binary.
+- The 21st line of `AGENTS.md` that had to be re-read every time
+  someone onboarded.
+
+The crate name had to change too: `cairn-cli` is an implementation
+detail; `cairn-client` describes what it actually is (the client
+half of a two-binary system). This matches the
+`cairn-server` → `cairn-api::bin::cairn-server` rename in
+ADR-029.
+
+### Decision
+- `crates/cairn-cli/Cargo.toml`: `name = "cairn-client"`,
+  `[[bin]] name = "cairn"`.
+- `[workspace.members]`: `"crates/cairn-client"`.
+- `[workspace.dependencies]`: `cairn-client = { path =
+  "crates/cairn-client" }`.
+- All `.rs` files, all docs, all scripts, all `.mcp.json` /
+  `.claude/settings.json` examples updated: `cairn-cli` →
+  `cairn` (string replace, scoped to the distinct token; no
+  partial matches like `cairn-cli-server`).
+- `cairn run`, `cairn mcp`, `cairn setup`, etc. are unchanged in
+  shape — only the binary name moved.
+
+### Rationale
+- One binary name. The agent MCP config is now
+  `command: "cairn", args: ["mcp"]` everywhere, period.
+- The install script installs `cairn` (host binary) and the
+  Docker image runs `cairn-server` (in-container binary). No
+  two-binary confusion.
+- The crate name `cairn-client` matches the architectural role
+  and is consistent with `cairn-core`, `cairn-store`, `cairn-api`,
+  etc.
+
+### Trade-offs
+- The crate name change is invisible to users (they only see the
+  binary name). It only matters for contributors running
+  `cargo run -p cairn-client` and for CI matrix entries.
+- The bulk rename touched 39 files. Most were docs and a few
+  were Rust source files (subcommand names like `cairn_run` and
+  `cairn_mcp` didn't need to change — only doc comments
+  referencing the binary did).
+- Historical references in `CHANGELOG.md`, `docs/DECISIONS.md`,
+  `docs/PLAN_v0.5.0.md`, and `docs/audits/*` are left verbatim:
+  they describe v0.5.0's reality and shouldn't be retroactively
+  edited. The CHANGELOG entry for v0.6.0 calls out the rename
+  explicitly.
+
+---
+
 ## See also
 
 - [Architecture](ARCHITECTURE.md) â€” how these decisions manifest in the code
 - [SECURITY.md](../SECURITY.md) â€” threat model + hardening checklist (updated Sprint 15c)
 - [Roadmap](ROADMAP.md) â€” what's done, what's next
 - [Web](WEB.md) â€” admin/CLI auth split surface
-- [Upgrading](UPGRADING.md) â€” 0.4.0 â†’ 0.5.0 migration
+- [Upgrading](UPGRADING.md) â€” 0.5.0 â†’ 0.6.0 migration
+- [Plan v0.6.0](PLAN_v0.6.0.md) â€” v0.6.0 cleanup sprint
 - [Audit Report](audits/REPORT.md) â€” security findings that informed several of these decisions
