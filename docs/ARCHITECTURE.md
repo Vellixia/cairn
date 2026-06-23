@@ -59,7 +59,7 @@ graph BT
     proactive["cairn-proactive<br/>intent classifier + auto-inject"]
     proxy["cairn-proxy<br/>cairn.sh reverse proxy"]
     ingest["cairn-ingest<br/>VTT/SRT/JSON transcript parsers"]
-    mcp["cairn-mcp<br/>MCP server (stdio) — 41+ tools · 6 resources · 5 prompts"]
+    mcp["cairn-mcp<br/>MCP server (stdio) — 29 tools + 10 graph actions · 6 resources · 5 prompts"]
     api["cairn-api<br/>REST API + web UI + registry + extensions + push"]
     server["cairn-server<br/>cairn binary"]
     cli["cairn-cli<br/>cairn-cli binary"]
@@ -101,7 +101,7 @@ graph BT
 |---|---|
 | `cairn-core` | Domain types, config resolution, errors, hashing, `OrgId`. No deps on other cairn crates. |
 | `cairn-store` | HelixDB backend (graph + vector) + content-hash `BlobStore`. Token/memory/checkpoint/audit persistence. |
-| `cairn-context` | Read modes (full/signatures/map/auto), content-hash + mtime cache (~13-tok re-reads), tree-sitter AST outlines (18 languages), `expand` recovery, `Assembler` (token-budgeted context). |
+| `cairn-context` | Read modes (full/signatures/map/auto), content-hash + mtime cache (~13-tok re-reads), tree-sitter AST outlines (11 languages), `expand` recovery, `Assembler` (token-budgeted context). |
 | `cairn-memory` | 4-tier memory (working/episodic/semantic/procedural), consolidation, Ebbinghaus decay, SHA-256 dedup, BM25 + semantic fusion via RRF, MMR diversity rerank, crystallize, provenance graph. |
 | `cairn-assemble` | Edge-ordered context assembly under a token budget. Anti-context-rot. |
 | `cairn-guard` | Verify edits vs originals, task anchor, checkpoint/rollback, reliability scoring. |
@@ -117,14 +117,14 @@ graph BT
 | `cairn-proactive` | Intent classifier (local heuristic, sub-ms), `ProactiveHook`, per-project opt-out. |
 | `cairn-proxy` | `cairn.sh` reverse proxy: parallel fan-out to multiple registries, best-effort merge. |
 | `cairn-ingest` | VTT/SRT/JSON transcript parsers + speaker-window chunking (default 60s). |
-| `cairn-mcp` | MCP server over stdio. Local mode (opens HelixDB store) or remote proxy mode (forwards to `cairn-api`). 41+ tools, 6 resources, 5 prompts. |
+| `cairn-mcp` | MCP server over stdio. Local mode (opens HelixDB store) or remote proxy mode (forwards to `cairn-api`). 29 tools + 10 graph actions = 39, 6 resources, 5 prompts. |
 | `cairn-api` | Axum REST API + embedded web UI (rust-embed). Auth middleware (cookie session + JWT device tokens), CORS, per-request CSP nonce. Registry + extensions + push + ingest routes. |
 | `cairn-server` | The `cairn` binary: `serve`, `token`, `pair-code`, `admin`. |
 | `cairn-cli` | The `cairn-cli` binary: `mcp`, `setup`, `run`, `hook`, `sync`, `pair`, `bench`, `pack`, `graph`, `memory`, `search`, `doctor`, `onboard`, etc. |
 
 ---
 
-## MCP Tool Surface (41+ tools)
+## MCP Tool Surface (29 tools + 10 graph actions = 39)
 
 All tools are exposed via `cairn-cli mcp` (stdio) and mirrored at `/api/tools/list` + `/api/tools/call`.
 
@@ -312,7 +312,7 @@ Add to `.cursor/mcp.json` (same JSON shape as OpenCode).
 
 - [Plan v0.5.0](PLAN_v0.5.0.md) — 23-sprint plan, success metrics, risks
 - [Benchmarks](BENCHMARKS.md) — measured token savings + methodology
-- [Decisions](DECISIONS.md) — 27 ADRs
+- [Decisions](DECISIONS.md) — 26 ADRs
 - [Roadmap](ROADMAP.md) — what's done, what's next
 - [Security](../SECURITY.md) — threat model + hardening checklist
 - [E2E Tests](E2E.md) — 20-scenario end-to-end test harness

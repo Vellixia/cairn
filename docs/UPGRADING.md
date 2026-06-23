@@ -22,18 +22,19 @@ crates). The single-admin/cookie-session model from 0.4.0 is unchanged — this 
 - 22 crates in the workspace. The old 14-crate dep graph is gone — `cairn-session`,
   `cairn-pack`, `cairn-registry`, `cairn-sync`, `cairn-bench`, `cairn-proactive`,
   `cairn-proxy`, and `cairn-ingest` are new.
-- **HelixDB is required.** `cairn-store` no longer ships a SQLite backend. If you had a
-  SQLite store, run a HelixDB container and `docker compose up -d helix` before restarting
-  Cairn. The server refuses to start when `CAIRN_HELIX_URL` is unset (or unreachable from
-  the bound interface).
+- **HelixDB is required.** `cairn-store` ships a pluggable backend (HelixDB +
+  in-memory). If you were on the 0.4 SQLite backend, run a HelixDB container and
+  `docker compose up -d helix` before restarting Cairn. The server refuses to start
+  when `CAIRN_HELIX_URL` is unset (or unreachable from the bound interface).
 - `deploy/` templates and the Chrome extension under `extensions/chrome/` were removed.
   Use `cairn-cli onboard` (or the new `cairn-cli install --docker` subcommand) to bootstrap
   a fresh stack.
 - `cairn-bench` now produces a single CSV row per fixture (`LongMemEval`, `horizon`,
   `retention`) and prints token savings alongside MRR.
-- The Cairn repository no longer commits `web/out/`. Only `web/out/.gitkeep` is tracked; the
-  Next.js static export is gitignored. CI must run `cd web && npm ci && npm run build`
-  before `cargo build --workspace` if the dashboard is needed at runtime; otherwise the
+- The Cairn repository does not commit `web/out/`. The directory is created at
+  compile time by `crates/cairn-api/build.rs` if missing; the Next.js static export
+  is gitignored. CI must run `cd web && npm ci && npm run build` before
+  `cargo build --workspace` if the dashboard is needed at runtime; otherwise the
   binary falls back to its built-in page.
 
 ## Migration steps
@@ -64,8 +65,8 @@ data on restart.
 ```sh
 git pull --tags
 cargo build --workspace --release
-# or, if you used the Homebrew tap:
-brew upgrade anomalyco/tap/cairn
+# or via the one-liner installer:
+curl -fsSL https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.sh | sh
 ```
 
 The 0.4.0 device tokens still authenticate — JWTs are HS256 and the secret is the same

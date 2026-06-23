@@ -68,7 +68,7 @@ time**. Cairn fixes that.
 
 ### Context compression
 
-- **AST-aware reads** — tree-sitter outlines for 18 languages. A 3,200-token file becomes ~210 tokens. The full original is one `expand` away.
+- **AST-aware reads** — tree-sitter outlines for 11 languages (rust, python, javascript, typescript, go, c, cpp, java, c#, ruby, bash). A 3,200-token file becomes ~210 tokens. The full original is one `expand` away.
 - **Cache-aware re-reads** — unchanged files cost ~19 tokens (just the handle). No context ever lost.
 - **Shell compression** — verbose command output (153 lines) compresses to 1 line, fully recoverable.
 - **Token-budget assembly** — edge-ordered context assembly under a budget. Anti-context-rot.
@@ -112,12 +112,7 @@ All lossless — the full original is retained and one `expand` away. See [Bench
 ### 1. Install
 
 ```sh
-# macOS / Linux — the recommended install path
-brew install Vellixia/tap/cairn       # ships both `cairn` (server) and `cairn-cli`
-```
-
-```sh
-# Linux / macOS — one-liner (alternative to Homebrew)
+# macOS / Linux — one-liner (recommended)
 curl -fsSL https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.sh | sh
 
 # Windows (PowerShell)
@@ -167,9 +162,7 @@ OpenCode is a first-class citizen — `cairn-cli` is one of its built-in provide
 The fastest path from `git clone` to a Cairn-aware session:
 
 ```sh
-# 1. Install the CLI (one of these)
-brew install Vellixia/tap/cairn         # macOS / Linux + Homebrew
-# or
+# 1. Install the CLI
 curl -fsSL https://raw.githubusercontent.com/Vellixia/Cairn/main/scripts/install.sh | sh
 
 # 2. Start the server stack
@@ -214,7 +207,7 @@ what's done and what's next.
 | [Plan v0.5.0](docs/PLAN_v0.5.0.md) | 23-sprint plan, success metrics, risks |
 | [Roadmap](docs/ROADMAP.md) | Development status — done, in progress, next |
 | [Benchmarks](docs/BENCHMARKS.md) | Token savings methodology + measured results |
-| [Decisions](docs/DECISIONS.md) | 27 ADRs covering every architecture decision |
+| [Decisions](docs/DECISIONS.md) | 26 ADRs covering every architecture decision |
 | [Security](docs/SECURITY.md) | Threat model + hardening checklist |
 | [E2E Tests](docs/E2E.md) | 20-scenario end-to-end test harness |
 | [Changelog](CHANGELOG.md) | Release notes for every version |

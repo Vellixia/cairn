@@ -30,7 +30,7 @@ tokens** (HS256 JWTs) issued by the admin from the **Devices** panel.
 |---|---|---|---|
 | `/api/auth/status` | GET | public | `{ admin_exists, setup_required }` |
 | `/api/auth/setup` | POST | public, CAS | first-run wizard |
-| `/api/auth/login` | POST | public, rate-limited 5/min | username + password → cookie |
+| `/api/auth/login` | POST | public | username + password → cookie |
 | `/api/auth/logout` | POST | idempotent | clears cookie |
 | `/api/auth/me` | GET | cookie | current session info; sliding TTL extension |
 
@@ -55,52 +55,52 @@ Every request goes through `auth()` (in `crates/cairn-api/src/lib.rs`):
 4. Loopback fallback — only when there are zero device tokens AND no admin
    (first-run before `/setup`). Lets the operator visit `/setup` on localhost.
 
-### Rate limits
+### Pairing-code limits
 
-| Endpoint | Limit | Why |
-|---|---|---|
-| `/api/auth/login` | 5/min/IP | brute-force defense |
-| `/api/auth/setup` | 3/min/IP | first-run is rare |
-| `/api/pair/claim` | 5/min/IP | brute-force defense |
-| everything else | 60/min/IP | existing global default |
+Pairing codes are short-lived (1–60 min, default 10) and single-use; v0.5.0
+does not enforce per-IP rate limits on the auth surface. See `docs/SECURITY.md`
+for the threat model; rate limiting is a documented v0.6 item.
 
 ## Dashboard surface
 
-### Layout (Sprint 26)
+### Layout (Sprint 27)
 
 - Left rail: **flat** sidebar with 4 entries — **Now** (static label) /
-  Memory & Context / Trust / You. State persists per-browser in
-  `localStorage` under the key `cairn-sidebar-v2`. Migration from `v1`:
-  unknown ids dropped; no group-open state is preserved. `aria-current="page"`
-  on the active item, with `?view=` and `?tab=` query awareness.
-- Each hub is a **single page** (`/dashboard?view=<hub>&tab=<sub>`) that
-  renders its sub-views as inline tabs. The 21 deep-link routes
-  (`/dashboard/memory`, `/dashboard/reliability/anchor`, etc.) still exist
-  for direct linking. Browser back/forward navigates between tabs.
+  Memory / Trust / You. State persists per-browser in `localStorage` under
+  the key `cairn-sidebar-v3`. On mount, the page removes the legacy keys
+  `cairn-sidebar-v1`, `cairn-sidebar-v2`, and `cairn-infocard-dismissed-v1`
+  from `localStorage` and `sessionStorage`. `aria-current="page"` on the
+  active item, matched by path only (query is ignored so `?tab=<sub>` does
+  not retrigger selection).
+- Hubs render as **single pages** at flat URLs: `/memory`, `/trust`, `/you`.
+  Tabs are surfaced via `?tab=<sub>`. The 21 deep-link routes
+  (`/memory/recall`, `/trust/score`, etc.) still render their single sub-page
+  for direct linking — they do not show the hub shell.
 - Top: ⌘K trigger + server health pill + reliability score + profile chip.
 - Center: per-hub tabs on `≥md`; collapses to a `<select>` on `<md` for
   mobile fallback.
 - Right-bottom: toast tray with `aria-live="polite"` and `role="alert"` for
   errors.
 
-#### InfoCard pattern (Sprint 26)
+#### HelpDialog pattern (Sprint 27)
 
-Each of the 21 sub-routes renders an inline `InfoCard` at the top of its
-content, keyed by route in `web/src/components/infocopy.ts`. The card has
-three blocks:
+Each of the 22 page routes shows a compact `?` icon in its page header that
+opens a shadcn Dialog with the page's help copy (keyed by route in
+`web/src/components/helpCopy.ts`). The dialog has three blocks:
 
 - **What this is** — one-sentence purpose.
 - **How to use it** — 1-3 bullets of the smallest action that works.
 - **Impact on Cairn** — concrete downstream effect (tokens, reliability,
   memory, savings).
 
-Cards are **dismissible per session** via a `Hide help` button. Dismissal
-is stored in `sessionStorage` under `cairn-infocard-dismissed-v1` with the
-key derived from the first 40 characters of the `what` string. A compact
-`?` button in the card's top-right restores the card (`Show help for this
-section`); both buttons carry `aria-live="polite"`.
+The trigger button carries `aria-label="Help: <title>"` for screen readers.
+Help copy is route-keyed (not session-dismissible) so deep-links always
+show the same content. The previous inline `InfoCard` pattern (Sprint 26)
+was retired in Sprint 27 because it visually overwhelmed the dashboard and
+landed inside nested components (the Trust Score page ended up with 11
+nested cards).
 
-### Overview page (`/dashboard`)
+### Overview page (`/` → Now)
 
 Signal-dense landing page composed of:
 
@@ -143,22 +143,24 @@ Signal-dense landing page composed of:
 
 | Path | Purpose |
 |---|---|
-| `/dashboard` | Overview (signal-dense) |
-| `/dashboard/settings` | Session info, sign out |
-| `/dashboard/memory` | Remember (write) |
-| `/dashboard/memory/recall` | Search (BM25 + semantic) |
-| `/dashboard/memory/wakeup` | High-importance memories |
-| `/dashboard/context` | File inspector (read modes + expand) |
-| `/dashboard/context/assemble` | Token-budget assembly |
-| `/dashboard/reliability` | Edit-guard score |
-| `/dashboard/reliability/anchor` | Task anchor (set/update) |
-| `/dashboard/reliability/checkpoints` | Snapshot + rollback |
-| `/dashboard/share/sanitize` | Redact secrets + classify |
-| `/dashboard/share/export` | Build sanitized bundle |
-| `/dashboard/pool` | Pool + federate |
-| `/dashboard/devices` | **Admin: issue / list / revoke device tokens** |
-| `/dashboard/devices/pair` | **Admin: generate pairing code** |
-| `/dashboard/devices/audit` | **Admin: last 50 audit events** |
+| `/` → `/memory` | Overview (Now) |
+| `/memory` | Memory hub: remember / recall / wakeup / graph / inspector / assemble / savings |
+| `/memory/recall` | Search (BM25 + semantic) |
+| `/memory/wakeup` | High-importance memories |
+| `/memory/assemble` | Token-budget assembly |
+| `/memory/inspector` | File inspector (read modes + expand) |
+| `/trust` | Trust hub: score / anchor / checkpoints / drift / sanitize / registry / pool |
+| `/trust/score` | Reliability score |
+| `/trust/anchor` | Task anchor (set/update) |
+| `/trust/checkpoints` | Snapshot + rollback |
+| `/trust/drift` | Drift center |
+| `/trust/sanitize` | Redact secrets + classify |
+| `/you` | You hub: profile / tokens / pair / audit / sessions / settings |
+| `/you/tokens` | **Admin: issue / list / revoke device tokens** |
+| `/you/pair` | **Admin: generate pairing code** |
+| `/you/audit` | **Admin: last 50 audit events** |
+| `/you/sessions` | Per-session detail list |
+| `/you/settings` | Session info, sign out |
 
 ### Admin actions in the UI
 
@@ -174,10 +176,11 @@ The admin can do everything the CLI could, from the dashboard:
 
 ## Static export
 
-`web/out/.gitkeep` ships so `cargo build` is hermetic — no Node toolchain
-required to build the cairn binary. The build.rs in `cairn-api` creates the
-directory if it's missing. The Docker build runs `npm run build` before
-compiling Rust so the container ships the full dashboard.
+`web/out/` is **gitignored** (no `.gitkeep` in the repo). The `build.rs` in
+`cairn-api` creates the directory at compile time if missing so `cargo build`
+is hermetic — no Node toolchain required. The Docker build runs
+`npm run build` before compiling Rust so the container ships the full
+dashboard.
 
 To rebuild the dashboard from source:
 
@@ -187,8 +190,7 @@ npm ci
 npm run build          # writes web/out/
 ```
 
-`web/out/` is gitignored except for `.gitkeep`. Build artifacts are never
-committed.
+`web/out/` is fully gitignored. Build artifacts are never committed.
 
 ## Security headers
 

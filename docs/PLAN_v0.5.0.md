@@ -532,12 +532,10 @@ pub struct Session {
   - Registry search returns published pack metadata
 
 **Sprint 12 — Distribution Polish**
-- Homebrew tap (`Vellixia/homebrew-tap`)
 - Fly/Railway/Render one-click templates
 - Non-root Docker volume init
 - OpenCode README quickstart section
 - **Testing:**
-  - `brew install cairn` formula test in CI
   - Docker compose `up` with non-root volume succeeds
   - README install flow verified by fresh user (manual QA)
 
@@ -695,7 +693,7 @@ At the end of v0.5.0:
 - **Confidence reinforcement visible in UI**
 - **Drift events reviewable + approvable**
 - **One-command install** works on Linux/macOS/Windows
-- **Homebrew + one-click deploy** available
+- **One-click deploy** available
 - **LongMemEval/LoCoMo scores published** honestly
 - **No in-memory-only state** (audit, sessions, drift, ledger all durable)
 

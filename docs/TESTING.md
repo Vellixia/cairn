@@ -28,6 +28,15 @@ a fresh `docker compose up`. See `docs/E2E.md` for the full list.
 
 ## Summary
 
+The v0.5.0 release runs **20 e2e scenarios** (`scripts/e2e/01-*.ps1` …
+`20-*.ps1`, ~67 assertions, 67/69 pass) against a fresh `docker compose up`.
+`cargo test --workspace` reports **330 passed + 5 ignored** for the unit
+and integration suite. Both are the single source of truth for release
+readiness; see `docs/E2E.md` for the scenario list and `docs/ROADMAP.md`
+for the live numbers.
+
+Historical category table (v0.4.0, kept for diff context):
+
 | Category | Tests | Passed | Failed | Notes |
 |---|---|---|---|---|
 | 1. Memory | 8 | 8 | 0 | 1.4 returns loose matches (hashing embedder) |
@@ -40,10 +49,10 @@ a fresh `docker compose up`. See `docs/E2E.md` for the full list.
 | 9. Multi-device | 5 | 5 | 0 | Secret key alignment fixed |
 | 10. Share/federation | 3 | 3 | 0 | Admin token required for contribute (documented) |
 | 11. Path rewriting | 3 | 3 | 0 | Absolute, relative, outside workspace |
-| 12. API endpoints | 5 | 5 | 0 | Health, tools, call, auth, rate limit |
+| 12. API endpoints | 5 | 5 | 0 | Health, tools, call, auth |
 | 13. Setup | 5 | 5 | 0 | Setup, idempotent, rules, doctor |
 | 14. Benchmarks | 3 | 3 | 0 | Bench shows 90.3% savings |
-| **Total** | **54** | **54** | **0** | All documented issues resolved |
+| **Total (v0.4)** | **54** | **54** | **0** | Replaced by 20-scenario e2e harness + 330 cargo tests in v0.5.0 |
 
 ---
 

@@ -21,9 +21,9 @@ cargo run -p cairn-server -- serve
 cd web && npm install && npm run dev
 ```
 
-The Rust build does **not** require building the web UI — `web/out/.gitkeep` ships so the
-binary falls back to a built-in page when no export is present. Build artifacts are never
-committed.
+The Rust build does **not** require building the web UI — `crates/cairn-api/build.rs`
+creates `web/out/` at compile time when missing, so the binary falls back to a
+built-in page when no export is present. Build artifacts are never committed.
 
 ## Before you open a PR
 
@@ -38,7 +38,7 @@ cargo test --workspace
 - Keep changes focused; one logical change per PR.
 - Match the surrounding style. New behavior gets a test.
 - Dependencies use tilde constraints (`~major.minor`); build with `--locked` to catch drift.
-- No CI workflows in the repo yet — run all three locally before PRs.
+- CI runs `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, and `cargo build --workspace` on every PR via `.github/workflows/ci.yml`. Run the same commands locally before pushing.
 
 ## Workspace layout
 
@@ -66,7 +66,7 @@ cargo test --workspace
 | `cairn-ingest` | VTT/SRT/JSON transcript parsers · speaker-window chunking |
 | `cairn-embed` | embedding providers (hashing default, ONNX opt-in) |
 | `cairn-api` | axum REST API · embedded web UI · PWA service worker · push subscriptions |
-| `cairn-mcp` | MCP server (stdio) · 41+ tools · 6 resources · 5 prompts |
+| `cairn-mcp` | MCP server (stdio) · 29 tools + 10 graph actions = 39 total · 6 resources · 5 prompts |
 | `cairn-cli` | the `cairn` binary (serve, mcp, setup, hook, sync, bench, token, pack, sync, proxy) |
 | `cairn-server` | the `cairn` binary entry point (alternative name) |
 

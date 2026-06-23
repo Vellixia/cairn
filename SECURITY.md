@@ -46,7 +46,7 @@ days.
 | **Cascading revocation gap** — peer A revokes pack X, peer B keeps using it | Append-only `revocations.jsonl` log + `since=` cursor for fast pull. Subscriber applies events even when no local copy exists (`revoke_if_exists`). | Done (Sprint 14b) |
 | **Last-write-wins data loss** when two devices edit offline | Vector clocks + OR-Set / GCounter CRDTs detect concurrent edits and merge them. Concurrent `content` edits are flagged `Concurrent` so the UI can prompt the user. | Done (Sprint 15a) |
 | **Forward-secrecy gap** — a single long-lived passphrase encrypts everything | Documented limitation. ECDH per-session key exchange is on the v0.6 roadmap (ADR-022). | Planned v0.6 |
-| **Per-tenant isolation gap** — one admin can read another admin's memories | Auth scope is per-`DeviceToken` (scope: admin/write/read). The memory store is currently single-tenant; multi-tenant isolation is v0.6 (Sprint 19). | Planned v0.6 |
+| **Per-tenant isolation gap** — one admin can read another admin's memories | `OrgId` column on every memory (default `default`); tenant filter applied at query time in `cairn-store` + `cairn-api`. Multi-tenant mode toggled by `CAIRN_MULTI_TENANT=1`. Integration test `tenant_isolation_filters_recall_by_org` proves no cross-tenant recall. | Done (Sprint 19a, commit `d69d3c4`) |
 
 ## Current scope & hardening status
 
@@ -58,8 +58,11 @@ on the [Roadmap](docs/ROADMAP.md)):
 - **Collective knowledge / federation** — peer trust is opt-in via the
   registry's `trusted_keys.json`. Sanitization + consent pipeline is enforced at
   every publish boundary; no peer can bypass it.
-- **Multi-tenancy** — the per-tenant boundary is the `DeviceToken` scope field.
-  True per-tenant memory isolation is planned for Sprint 19.
+- **Multi-tenancy** — per-tenant isolation is shipped in v0.5.0. Every memory
+  carries an `OrgId` (`crates/cairn-core/src/tenant.rs`); tenant filter is
+  applied at query time in `cairn-store` and `cairn-api`. Toggle via
+  `CAIRN_MULTI_TENANT=1`. The `OrgId::default()` keeps the single-tenant
+  behaviour unchanged when the flag is off.
 
 When in doubt, run Cairn on a trusted network (LAN/VPN such as Tailscale)
 behind your own boundary.

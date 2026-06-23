@@ -1,7 +1,7 @@
 //! The minimal branded page served at `/` when `web/out/` is missing (no Next.js build).
 //!
 //! In v0.5.0 this doubles as the public landing page for fresh checkouts: install commands
-//! (curl / brew / PowerShell), before/after token comparison, and a pointer to the dashboard.
+//! (curl / PowerShell), before/after token comparison, and a pointer to the dashboard.
 //! The full marketing page ships with the Next.js export and is the canonical landing.
 //! This page is intentionally diagnostic-only — never calls any authed endpoint. The only
 //! network calls it makes are to the public `/api/health` and `/api/auth/status`.
@@ -79,8 +79,8 @@ pub const INDEX_HTML: &str = r###"<!doctype html>
         <pre class="codeblock">curl -fsSL https://cairn.sh/install.sh | sh</pre>
       </div>
       <div class="inst">
-        <h3>Homebrew</h3>
-        <pre class="codeblock">brew install cairn</pre>
+        <h3>Docker</h3>
+        <pre class="codeblock">docker compose up -d</pre>
       </div>
       <div class="inst">
         <h3>Windows (PowerShell)</h3>

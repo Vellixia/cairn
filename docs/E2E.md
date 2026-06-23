@@ -29,7 +29,7 @@ The harness runs **20 scenarios** covering the full v0.5.0 release:
 | 17 | 5.0 | Transcript ingestion: VTT + SRT formats |
 | 18 | 3.5 | SSE events: /api/events stream + /api/metrics |
 | 19 | 4.0 | CLI subcommands: doctor, stats, export |
-| 20 | 4.0 | Install files: scripts/install.ps1, docker-compose.yml, Homebrew formula, deploy templates |
+| 20 | 4.0 | Install files: scripts/install.ps1, scripts/install.sh, docker-compose.yml |
 
 ## Quick start
 
@@ -91,8 +91,8 @@ the cookie so subsequent scenarios can still authenticate.
 - **15** — PWA: fetches `/sw.js` and the push subscription endpoint.
 - **18** — SSE: opens an SSE connection with `curl -N`, triggers a memory
   write, asserts the event stream contains event lines.
-- **20** — filesystem: checks `scripts/install.ps1`, `docker-compose.yml`,
-  the Homebrew formula, and the one-click deploy templates exist.
+- **20** — filesystem: checks `scripts/install.ps1`, `scripts/install.sh`, and
+  `docker-compose.yml` exist.
 
 ## Known limitations
 

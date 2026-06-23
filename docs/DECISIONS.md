@@ -48,6 +48,10 @@ Split into two binaries:
 - **`cairn-cli`** (crate `cairn-cli`): client-only — `mcp`, `setup`, `rules`, `run`, `hook`,
   `remember`, `recall`, `sync`, `pair`, `bench`, `update`, `doctor`.
 
+> **Note (v0.5.0):** the subcommand list above is a snapshot from the v0.4.0
+> ADR; the current `cairn-cli` binary has grown to ~34 subcommands — see
+> `crates/cairn-cli/src/main.rs::Cmd` for the full enum.
+
 ### Rationale
 - Clear separation of concerns: server runs once on a host, client runs on every device.
 - MCP config is unambiguous: `command: ["cairn-cli", "mcp"]`.
