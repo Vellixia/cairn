@@ -31,7 +31,10 @@ edition = "2021"
 license = "Apache-2.0"
 authors = ["Cairn contributors"]
 repository = "https://github.com/Vellixia/cairn"
-rust-version = "1.80"
+# MSRV 1.85 — required by quinn-proto 0.11.15 (RUSTSEC-2026-0185 fix; see
+# [patch.crates-io] below). Bumped from 1.80 on 2026-06-22 to clear the
+# advisory; nothing in the workspace itself requires >1.80 features.
+rust-version = "1.85"
 
 [workspace.dependencies]
 # internal crates
@@ -98,3 +101,14 @@ rand_core = "~0.6"
 opt-level = 3
 lto = "thin"
 strip = true
+
+# Security override: RUSTSEC-2026-0185 (GHSA-4w2j-m93h-cj5j) — quinn-proto
+# 0.11.14 is vulnerable to unbounded out-of-order stream reassembly (CVSS 7.5
+# HIGH, unauth network DoS). The fix landed in quinn-proto 0.11.15
+# (2026-06-22). helix-db 2.0.x pins reqwest 0.13.4 which transitively pins
+# quinn-proto exactly to 0.11.14, so the resolver cannot pick the patched
+# version on its own. Force it here until helix-db upstream updates the
+# pin. Remove this patch once helix-db (or a replacement) bumps reqwest or
+# quinn-proto to >=0.11.15 transitively.
+[patch.crates-io]
+quinn-proto = { git = "https://github.com/quinn-rs/quinn", tag = "quinn-proto-0.11.15" }

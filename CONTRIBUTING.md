@@ -5,7 +5,7 @@ welcome.
 
 ## Development setup
 
-You'll need a recent **Rust** toolchain (stable, MSRV 1.80) and **Node 20+** (for the web UI).
+You'll need a recent **Rust** toolchain (stable, MSRV 1.85) and **Node 20+** (for the web UI).
 A running **HelixDB** instance is required for live integration tests — the simplest path is
 `docker compose up -d helix`.
 
