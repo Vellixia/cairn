@@ -527,8 +527,11 @@ impl StoreBackend for HelixBackend {
         let batch = write_batch()
             .var_as(
                 "u",
-                g().n_with_label_where(self.label("Token"), SourcePredicate::eq("id", token_id.to_string()))
-                    .set_property("last_used_at", now),
+                g().n_with_label_where(
+                    self.label("Token"),
+                    SourcePredicate::eq("id", token_id.to_string()),
+                )
+                .set_property("last_used_at", now),
             )
             .returning(["u"]);
         self.run(DynamicQueryRequest::write(batch))?;
@@ -549,7 +552,14 @@ impl StoreBackend for HelixBackend {
         Ok(self
             .read_rows(
                 "Token",
-                &["id", "name", "scope", "created_at", "expires_at", "last_used_at"],
+                &[
+                    "id",
+                    "name",
+                    "scope",
+                    "created_at",
+                    "expires_at",
+                    "last_used_at",
+                ],
             )?
             .iter()
             .map(|r| {
@@ -1020,7 +1030,9 @@ mod live {
     fn tokens_roundtrip() {
         let Some(be) = backend() else { return };
         let before = be.count_tokens().expect("count");
-        let tok = be.create_token("test-device", cairn_core::TokenScope::Write, None).expect("create_token");
+        let tok = be
+            .create_token("test-device", cairn_core::TokenScope::Write, None)
+            .expect("create_token");
         assert!(be.validate_token_id(&tok.id).expect("validate"));
         assert!(be
             .list_tokens()

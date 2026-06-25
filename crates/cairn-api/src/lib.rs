@@ -1168,7 +1168,9 @@ async fn pair_new(
         .name
         .filter(|n| !n.trim().is_empty())
         .unwrap_or_else(|| "device".to_string());
-    let token = s.store.create_token(&name, cairn_core::TokenScope::Write, None)?;
+    let token = s
+        .store
+        .create_token(&name, cairn_core::TokenScope::Write, None)?;
     let code = pairing_code();
     let expires = (Utc::now() + chrono::Duration::minutes(10))
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);

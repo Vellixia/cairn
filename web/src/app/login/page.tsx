@@ -153,7 +153,7 @@ function LoginForm() {
             <p className="mt-5 text-xs text-muted-foreground">
               Default username <code>admin</code>. First run?{" "}
               <a href="/setup" className="text-primary hover:underline">
-                Create admin ->
+                Create admin
               </a>
             </p>
           </CardContent>

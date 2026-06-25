@@ -416,7 +416,11 @@ fn escape_toml(s: &str) -> String {
         .replace('\t', "\\t")
 }
 
-fn cairn_server(server: Option<&str>, token: Option<&str>, existing_env: Option<&Map<String, Value>>) -> Value {
+fn cairn_server(
+    server: Option<&str>,
+    token: Option<&str>,
+    existing_env: Option<&Map<String, Value>>,
+) -> Value {
     let mut env = Map::new();
     // Preserve any existing env vars from a previous setup run.
     if let Some(existing) = existing_env {

@@ -466,7 +466,7 @@ impl McpServer {
                     .as_ref()
                     .ok_or("no registry configured on this server")?;
                 let results = reg.search(query).map_err(|e| e.to_string())?;
-                serde_json::to_string_pretty(&results)                .map_err(|e| e.to_string())
+                serde_json::to_string_pretty(&results).map_err(|e| e.to_string())
             }
             other => Err(format!("unknown tool: {other}")),
         }

@@ -182,7 +182,7 @@ export function OverviewContent() {
                 href="/memory?tab=recall"
                 className="text-[hsl(var(--color-info))] hover:underline"
               >
-                Browse recent memories ->
+                Browse recent memories
               </Link>
             </p>
           ) : memories.data ? (

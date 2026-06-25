@@ -144,21 +144,23 @@ fn check_remote_server() -> Check {
                         .set("Authorization", &format!("Bearer {t}"))
                         .call()
                     {
-                        Ok(resp) if resp.status() == 200 => {
-                            (true, format!("{s} (token valid)"))
-                        }
+                        Ok(resp) if resp.status() == 200 => (true, format!("{s} (token valid)")),
                         Ok(resp) => {
                             let status = resp.status();
                             let body = resp.into_string().unwrap_or_default();
-                            (false, format!("{s} (token rejected: HTTP {status} -- {body})"))
+                            (
+                                false,
+                                format!("{s} (token rejected: HTTP {status} -- {body})"),
+                            )
                         }
-                        Err(e) => {
-                            (false, format!("{s} (token check failed: {e})"))
-                        }
+                        Err(e) => (false, format!("{s} (token check failed: {e})")),
                     }
                 }
                 Some(_) => (false, format!("{s} (CAIRN_TOKEN is empty)")),
-                None => (false, format!("{s} (no CAIRN_TOKEN -- every request will 401)")),
+                None => (
+                    false,
+                    format!("{s} (no CAIRN_TOKEN -- every request will 401)"),
+                ),
             };
             Check {
                 name: "remote server",

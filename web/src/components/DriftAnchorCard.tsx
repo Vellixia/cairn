@@ -118,7 +118,7 @@ export function DriftAnchorCard() {
             href="/trust?tab=drift"
             className="text-[hsl(var(--color-info))] hover:underline"
           >
-            Drift center ->
+            Drift center
           </Link>
         </div>
       </CardContent>

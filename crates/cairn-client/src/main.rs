@@ -16,7 +16,11 @@ mod setup;
 mod update;
 
 #[derive(Parser)]
-#[command(name = "cairn", version, about = "Cairn client - connect AI agents to a Cairn server")]
+#[command(
+    name = "cairn",
+    version,
+    about = "Cairn client - connect AI agents to a Cairn server"
+)]
 struct Cli {
     #[arg(long, global = true)]
     data_dir: Option<PathBuf>,
@@ -104,7 +108,11 @@ async fn main() -> anyhow::Result<()> {
                 interactive: std::io::stdout().is_terminal(),
             })?;
         }
-        Cmd::Onboard { skip_agents, server, token } => {
+        Cmd::Onboard {
+            skip_agents,
+            server,
+            token,
+        } => {
             onboard::run(onboard::OnboardOptions {
                 skip_agents,
                 fix: true,
@@ -112,9 +120,12 @@ async fn main() -> anyhow::Result<()> {
                 token,
             })?;
         }
-        Cmd::Setup { agent, all, server, token } => {
-            setup::run(agent.as_deref(), all, server.as_deref(), token.as_deref())?
-        }
+        Cmd::Setup {
+            agent,
+            all,
+            server,
+            token,
+        } => setup::run(agent.as_deref(), all, server.as_deref(), token.as_deref())?,
         Cmd::Mcp => {
             cairn_mcp::serve_stdio(&cfg)?;
         }

@@ -92,7 +92,10 @@ fn run_inner(cfg: &Config, event: &str) -> Result<()> {
                 .get("tool_name")
                 .and_then(Value::as_str)
                 .unwrap_or("");
-            if matches!(tool, "Edit" | "Write" | "MultiEdit" | "NotebookEdit" | "StrReplace") {
+            if matches!(
+                tool,
+                "Edit" | "Write" | "MultiEdit" | "NotebookEdit" | "StrReplace"
+            ) {
                 if let Some(file) = payload
                     .get("tool_input")
                     .and_then(|t| t.get("file_path"))
@@ -141,9 +144,7 @@ impl RemoteClient {
         }
         Some(Self {
             server,
-            token: std::env::var("CAIRN_TOKEN")
-                .ok()
-                .filter(|t| !t.is_empty()),
+            token: std::env::var("CAIRN_TOKEN").ok().filter(|t| !t.is_empty()),
         })
     }
 
@@ -196,17 +197,13 @@ fn run_remote(rc: &RemoteClient, event: &str, payload: &Value) -> Result<()> {
                 if let Ok(mems) = resp.into_json::<Vec<Value>>() {
                     let non_pref: Vec<_> = mems
                         .iter()
-                        .filter(|m| {
-                            m.get("kind").and_then(Value::as_str) != Some("preference")
-                        })
+                        .filter(|m| m.get("kind").and_then(Value::as_str) != Some("preference"))
                         .collect();
                     if !non_pref.is_empty() {
                         ctx.push_str("Cairn memory - what you already know here:\n");
                         for m in non_pref {
-                            let kind =
-                                m.get("kind").and_then(Value::as_str).unwrap_or("note");
-                            let content =
-                                m.get("content").and_then(Value::as_str).unwrap_or("");
+                            let kind = m.get("kind").and_then(Value::as_str).unwrap_or("note");
+                            let content = m.get("content").and_then(Value::as_str).unwrap_or("");
                             ctx.push_str(&format!("- ({kind}) {content}\n"));
                         }
                     }

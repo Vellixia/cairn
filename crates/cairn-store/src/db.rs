@@ -438,7 +438,9 @@ mod tests {
     fn tokens_create_validate_revoke() {
         let Some(s) = store() else { return };
         assert_eq!(s.count_tokens().unwrap(), 0);
-        let t = s.create_token("laptop", cairn_core::TokenScope::Write, None).unwrap();
+        let t = s
+            .create_token("laptop", cairn_core::TokenScope::Write, None)
+            .unwrap();
         assert!(s.validate_token_id(&t.id).unwrap());
         assert!(!s.validate_token_id("nope").unwrap());
         assert_eq!(s.count_tokens().unwrap(), 1);

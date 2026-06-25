@@ -85,7 +85,7 @@ return (
             <AlertDialogHeader>
               <AlertDialogTitle>v1 setup --- deprecated in v0.5.0</AlertDialogTitle>
               <AlertDialogDescription>
-                The new wizard (admin -> embed -> pair -> health) lives at{" "}
+                The new wizard (admin, embed, pair, health) lives at{" "}
                 <Link href="/setup/wizard" className="underline font-mono">
                   /setup/wizard
                 </Link>
