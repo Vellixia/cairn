@@ -206,7 +206,10 @@ services:
       helix:
         condition: service_healthy
     environment:
-      CAIRN_HOST: 127.0.0.1
+      # Inside the container, bind to all interfaces so Docker's userspace proxy can forward
+      # the host port. LAN exposure is controlled by the host-side port binding below
+      # (127.0.0.1:7777:7777 keeps it localhost-only on the host).
+      CAIRN_HOST: 0.0.0.0
       CAIRN_PORT: "7777"
       # Env-only admin bootstrap (see cairn-admin-guard init service). Comment out
       # CAIRN_ADMIN_PASSWORD in .env to fall back to the dashboard /setup wizard.
