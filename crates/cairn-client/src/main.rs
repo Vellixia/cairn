@@ -23,6 +23,7 @@ mod pool;
 mod rules;
 mod setup;
 mod sync;
+mod update;
 
 #[derive(Parser)]
 #[command(
@@ -196,6 +197,12 @@ enum Cmd {
         /// Device token for the remote server (if it requires auth).
         #[arg(long)]
         token: Option<String>,
+    },
+    /// Check for a newer release and update the binary in place.
+    Update {
+        /// Only report whether an update is available; do not download.
+        #[arg(long)]
+        check: bool,
     },
     /// Export all memories as JSON (to a file, or stdout if omitted).
     Export {
@@ -609,6 +616,7 @@ async fn main() -> anyhow::Result<()> {
             let s = State::open(&cfg)?;
             pool::pull(&s.mem, &server, token.as_deref())?;
         }
+        Cmd::Update { check } => update::run(check)?,
         Cmd::Export { path, share } => {
             let s = State::open(&cfg)?;
             let mems = s.store.all_memories()?;
