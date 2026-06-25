@@ -60,7 +60,7 @@ pub fn memory_timeline(s: &State, limit: usize) -> Result<()> {
     eprintln!("memory timeline (newest first, limit={limit}):");
     for m in sorted {
         println!(
-            "[{}] {} · {} · conf {:.2}{}",
+            "[{}] {} . {} . conf {:.2}{}",
             m.updated_at.format("%Y-%m-%d %H:%M:%S"),
             m.kind.as_str(),
             m.content.chars().take(80).collect::<String>(),
@@ -89,7 +89,7 @@ pub fn memory_re_embed(s: &State) -> Result<()> {
         println!("no memories to re-embed");
         return Ok(());
     }
-    eprintln!("re-embedding {total} memories…");
+    eprintln!("re-embedding {total} memories...");
     let mut done = 0usize;
     for m in &memories {
         s.store.upsert_memory(m).context("upserting memory")?;
@@ -109,7 +109,7 @@ pub fn metrics(s: &State) -> Result<()> {
     eprintln!("cairn metrics:");
     println!("  memories   : {memories}");
     println!("  checkpoints: {checkpoints}");
-    println!("  tokens     : {tokens} (placeholder — see /api/metrics for live ledger)");
+    println!("  tokens     : {tokens} (placeholder --- see /api/metrics for live ledger)");
     Ok(())
 }
 
@@ -127,7 +127,7 @@ pub fn search(s: &State, query: &str, limit: usize) -> Result<()> {
     println!("search: {} hit(s) for {query:?}", hits.len());
     for h in hits {
         println!(
-            "  [{:.3}] {} · {}",
+            "  [{:.3}] {} . {}",
             h.score,
             h.memory.kind.as_str(),
             h.memory.content
@@ -176,12 +176,12 @@ fn sessions_call(
     let server_env = std::env::var("CAIRN_SERVER").ok();
     let token_env = std::env::var("CAIRN_TOKEN").ok();
     let server = server.or(server_env.as_deref()).context(
-        "no server configured — set --server <url> or CAIRN_SERVER \
+        "no server configured --- set --server <url> or CAIRN_SERVER \
              (sessions live on the server, not the local store)",
     )?;
     let token = token
         .or(token_env.as_deref())
-        .context("no token — set --token <jwt> or CAIRN_TOKEN")?;
+        .context("no token --- set --token <jwt> or CAIRN_TOKEN")?;
 
     let url = format!("{}{}", server.trim_end_matches('/'), path);
     eprintln!("sessions {method} {url}");
@@ -263,7 +263,7 @@ mod tests {
         let Some((_dir, s)) = temp_state() else {
             return;
         };
-        // Empty store — should print "no working memories" and not panic.
+        // Empty store --- should print "no working memories" and not panic.
         memory_crystallize(&s).unwrap();
     }
 
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn sessions_call_requires_server() {
-        // No server set → should fail with a clear error message.
+        // No server set -> should fail with a clear error message.
         std::env::remove_var("CAIRN_SERVER");
         std::env::remove_var("CAIRN_TOKEN");
         let r = sessions_list(None, None);

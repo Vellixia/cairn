@@ -1,4 +1,4 @@
-﻿//! The `cairn` binary.
+//! The `cairn` binary.
 //!
 //! `cairn` connects AI agents to a Cairn server and runs local tools against the local store.
 //! When `CAIRN_HELIX_URL` is set it talks to a local HelixDB; when `CAIRN_SERVER` is set it proxies
@@ -29,7 +29,7 @@ mod update;
 #[command(
     name = "cairn",
     version,
-    about = "Cairn client â€” connect AI agents to a Cairn server"
+    about = "Cairn client --- connect AI agents to a Cairn server"
 )]
 struct Cli {
     /// Override the data directory (defaults to the OS data dir).
@@ -60,7 +60,7 @@ enum Cmd {
         #[arg(trailing_var_arg = true, num_args = 1..)]
         rule: Vec<String>,
     },
-    /// Set the current task anchor â€” the goal re-injected at session start.
+    /// Set the current task anchor --- the goal re-injected at session start.
     Anchor {
         #[arg(trailing_var_arg = true, num_args = 1..)]
         goal: Vec<String>,
@@ -87,7 +87,7 @@ enum Cmd {
         /// Skip agent auto-detection and wiring (useful for CI).
         #[arg(long)]
         skip_agents: bool,
-        /// Remote Cairn server URL â€” sets `CAIRN_SERVER` so the spawned `setup` subprocess
+        /// Remote Cairn server URL --- sets `CAIRN_SERVER` so the spawned `setup` subprocess
         /// runs in remote-proxy mode.
         #[arg(long)]
         server: Option<String>,
@@ -377,7 +377,7 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Wakeup { limit } => {
             let s = State::open(&cfg)?;
             for m in s.mem.wakeup(limit)? {
-                println!("Â· ({}) {}", m.kind.as_str(), m.content);
+                println!("- ({}) {}", m.kind.as_str(), m.content);
             }
         }
         Cmd::Prefer { rule } => {
@@ -598,7 +598,7 @@ async fn main() -> anyhow::Result<()> {
                 println!();
             }
             eprintln!(
-                "[cairn: {} â†’ {} lines, {:.0}% saved Â· recover full output with `expand {}`]",
+                "[cairn: {} -> {} lines, {:.0}% saved - recover full output with `expand {}`]",
                 c.original_lines,
                 c.compressed_lines,
                 c.saved_ratio * 100.0,
@@ -671,7 +671,7 @@ fn build_share_bundle(mems: &[cairn_core::Memory]) -> anyhow::Result<String> {
     let san = cairn_share::Sanitizer::new();
     let (bundle, stats) = san.bundle(mems);
     eprintln!(
-        "[cairn share: {} scanned â†’ {} shareable ({} need review), {} withheld as private]",
+        "[cairn share: {} scanned -> {} shareable ({} need review), {} withheld as private]",
         stats.total, stats.shared, stats.needs_review, stats.withheld
     );
     Ok(serde_json::to_string_pretty(&bundle)?)

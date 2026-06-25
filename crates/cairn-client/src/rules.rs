@@ -1,7 +1,7 @@
-//! `cairn rules` — write per-agent instruction files that tell the model to actually USE Cairn.
+//! `cairn rules` --- write per-agent instruction files that tell the model to actually USE Cairn.
 //!
 //! Registering an MCP server is not enough: the agent has to be *told* to prefer Cairn's tools
-//! (`read`/`recall`/`remember`/`sanitize`/…) over its defaults — exactly like a hand-written rules
+//! (`read`/`recall`/`remember`/`sanitize`/...) over its defaults --- exactly like a hand-written rules
 //! file. This writes that guidance into each agent's native instructions file, idempotently:
 //! shared files (CLAUDE.md, AGENTS.md) get a replaceable **managed block**.
 
@@ -15,13 +15,13 @@ const KNOWN: &[&str] = &["claude-code", "codex", "opencode", "agents"];
 const BEGIN: &str = "<!-- BEGIN CAIRN (managed by `cairn rules`) -->";
 const END: &str = "<!-- END CAIRN -->";
 
-/// The instruction body — what every agent is told about using Cairn. Kept tool-name-accurate.
+/// The instruction body --- what every agent is told about using Cairn. Kept tool-name-accurate.
 const BODY: &str = "\
-## Cairn — prefer these tools
+## Cairn --- prefer these tools
 
 You have **Cairn** (MCP server `cairn`): persistent memory, lean context, and edit safety. Use it.
 
-- **Reading code/files:** use `read` instead of your default file read — unchanged re-reads are
+- **Reading code/files:** use `read` instead of your default file read --- unchanged re-reads are
   nearly free, and `mode:\"signatures\"` returns a large file as just its structure (huge token
   saving). Recover any full original with `expand`.
 - **Memory:** at the start of a task, `recall` (or `assemble`) relevant past decisions and context;
@@ -35,10 +35,10 @@ You have **Cairn** (MCP server `cairn`): persistent memory, lean context, and ed
   durable knowledge. Curate with `memory_pin` (keep), `memory_reinforce` (bump confidence),
   `memory_delete` (remove stale). On self-hosted servers use `registry_search` / `registry_revoke`
   to manage the local pack registry.
-- **Dashboard is observability-only:** the web UI shows what exists and progress — you are the one
+- **Dashboard is observability-only:** the web UI shows what exists and progress --- you are the one
   who writes, curates, and maintains; humans watch.
 
-Everything Cairn shows is lossless — the full original is always one `expand` away.";
+Everything Cairn shows is lossless --- the full original is always one `expand` away.";
 
 pub fn run(agent: Option<&str>, all: bool) -> Result<()> {
     let project = std::env::current_dir()?;

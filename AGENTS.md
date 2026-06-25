@@ -33,7 +33,7 @@ cargo build --workspace
 ```
 
 - CI runs `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, and `cargo build --workspace` on every PR via `.github/workflows/ci.yml`. Run the same commands locally before pushing.
-- Dependencies use tilde constraints (`~major.minor`) — build with `--locked` to catch drift.
+- Dependencies use tilde constraints (`~major.minor`) --- build with `--locked` to catch drift.
 - Run a single crate's tests: `cargo test -p cairn-core` (substitute any crate name).
 - `cargo build --workspace` does **not** require the web UI; `crates/cairn-api/build.rs` creates `web/out/` at compile time when missing so the binary falls back to its built-in page.
 
@@ -44,7 +44,7 @@ docker compose up -d
 
 **Web UI (separate from Rust):**
 ```sh
-cd web && npm install && npm run dev   # :3000 → API on :7777
+cd web && npm install && npm run dev   # :3000 -> API on :7777
 ```
 
 ## Architecture
@@ -56,7 +56,7 @@ cd web && npm install && npm run dev   # :3000 → API on :7777
 | `cairn-server` (in-container) | Docker image (`cairn-api` bin) | Long-lived server: binds :7777, serves the API + web UI, runs env-only admin bootstrap |
 | `cairn` (host) | release tarball (`cairn-client` crate) | Client: `mcp`, `setup`, `rules`, `run`, `hook`, `remember`, `recall`, `sync`, `pair`, `bench`, `pack`, `graph`, `memory`, `search`, `doctor`, `onboard` |
 
-**Dep graph:** `cairn-core` → `cairn-store` → domain crates (`context`, `memory`, `guard`, `shell`, `profile`, `embed`, `share`, `assemble`) → `cairn-mcp` → `cairn-api` → `cairn-client`.
+**Dep graph:** `cairn-core` -> `cairn-store` -> domain crates (`context`, `memory`, `guard`, `shell`, `profile`, `embed`, `share`, `assemble`) -> `cairn-mcp` -> `cairn-api` -> `cairn-client`.
 
 **Config precedence:** CLI flag > env var > project `.env` > `~/.config/cairn/.env` > built-in default.
 
@@ -84,8 +84,8 @@ cd web && npm install && npm run dev   # :3000 → API on :7777
 
 ## Key files
 
-- `Cargo.toml` — workspace manifest, dep versions, `[profile.release]` (lto = "thin", strip = true)
-- `deny.toml` — cargo-deny config (bans multiple-versions, yanked crates)
-- `rust-toolchain.toml` — pins `stable` with `rustfmt` + `clippy` components
-- `.mcp.json` — MCP config for OpenCode (Claude Code + Codex use their own configs)
-- `.claude/settings.json` — Claude Code lifecycle hooks via `cairn hook`
+- `Cargo.toml` --- workspace manifest, dep versions, `[profile.release]` (lto = "thin", strip = true)
+- `deny.toml` --- cargo-deny config (bans multiple-versions, yanked crates)
+- `rust-toolchain.toml` --- pins `stable` with `rustfmt` + `clippy` components
+- `.mcp.json` --- MCP config for OpenCode (Claude Code + Codex use their own configs)
+- `.claude/settings.json` --- Claude Code lifecycle hooks via `cairn hook`

@@ -1,4 +1,4 @@
-//! `cairn pack` â€” build / inspect / install / publish `.cairnpkg` bundles (Sprint 11).
+//! `cairn pack` --- build / inspect / install / publish `.cairnpkg` bundles (Sprint 11).
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -73,7 +73,7 @@ pub fn run(cmd: PackCmd, s: &State) -> Result<()> {
     }
 }
 
-/// `cairn pack create <name> <version>` â€” bundle current state into a `.cairnpkg` tarball.
+/// `cairn pack create <name> <version>` --- bundle current state into a `.cairnpkg` tarball.
 fn create(
     name: &str,
     version: &str,
@@ -104,7 +104,7 @@ fn create(
     Ok(())
 }
 
-/// `cairn pack info <file>` â€” print the manifest.
+/// `cairn pack info <file>` --- print the manifest.
 fn info(tarball: &Path) -> Result<()> {
     if !cairn_pack::manifest::is_supported_extension(tarball) {
         anyhow::bail!(
@@ -132,12 +132,12 @@ fn info(tarball: &Path) -> Result<()> {
     );
     println!("files:");
     for (k, v) in &m.files {
-        println!("  {k:<24}  sha256:{v:.16}â€¦");
+        println!("  {k:<24}  sha256:{v:.16}...");
     }
     Ok(())
 }
 
-/// `cairn pack install <file>` â€” extract into `<data_dir>/packs/<name>/` and ingest the
+/// `cairn pack install <file>` --- extract into `<data_dir>/packs/<name>/` and ingest the
 /// memories into the local store.
 fn install(tarball: &Path, s: &State) -> Result<()> {
     if !cairn_pack::manifest::is_supported_extension(tarball) {
@@ -175,7 +175,7 @@ fn install(tarball: &Path, s: &State) -> Result<()> {
     Ok(())
 }
 
-/// `cairn pack list` â€” list packs installed under `<data_dir>/packs`.
+/// `cairn pack list` --- list packs installed under `<data_dir>/packs`.
 fn list(s: &State) -> Result<()> {
     let _ = s;
     let data_dir = match std::env::var("CAIRN_DATA_DIR") {
@@ -200,7 +200,7 @@ fn list(s: &State) -> Result<()> {
     Ok(())
 }
 
-/// `cairn pack remove <name>` â€” uninstall a pack.
+/// `cairn pack remove <name>` --- uninstall a pack.
 fn remove(name: &str, s: &State) -> Result<()> {
     let _ = s;
     let data_dir = match std::env::var("CAIRN_DATA_DIR") {
@@ -216,7 +216,7 @@ fn remove(name: &str, s: &State) -> Result<()> {
     Ok(())
 }
 
-/// `cairn pack export <name> <file>` â€” re-tar an installed pack. Useful for shipping
+/// `cairn pack export <name> <file>` --- re-tar an installed pack. Useful for shipping
 /// a pack you got via the registry back out as a file for offline use.
 fn export(name: &str, output: &Path, s: &State) -> Result<()> {
     let _ = s;
@@ -228,7 +228,7 @@ fn export(name: &str, output: &Path, s: &State) -> Result<()> {
     if !src.exists() {
         anyhow::bail!("no such pack: {name}");
     }
-    // Reuse Pack::write_tarball â€” walk the installed dir and re-tar its files.
+    // Reuse Pack::write_tarball --- walk the installed dir and re-tar its files.
     use cairn_pack::Pack;
     let mut pack = Pack::new(name, "0.0.0");
     for entry in std::fs::read_dir(&src)? {
@@ -254,11 +254,11 @@ fn export(name: &str, output: &Path, s: &State) -> Result<()> {
         }
     }
     pack.write_tarball(output)?;
-    eprintln!("exported {name} â†’ {}", output.display());
+    eprintln!("exported {name} -> {}", output.display());
     Ok(())
 }
 
-/// `cairn pack auto-load` â€” toggle the auto-load list (a meta key in the local store).
+/// `cairn pack auto-load` --- toggle the auto-load list (a meta key in the local store).
 fn auto_load(s: &State) -> Result<()> {
     let key = "auto_load_packs";
     match s.store.get_meta(key)? {
@@ -269,7 +269,7 @@ fn auto_load(s: &State) -> Result<()> {
     Ok(())
 }
 
-/// `cairn pack publish <file> --registry <url>` â€” POST the tarball to a registry.
+/// `cairn pack publish <file> --registry <url>` --- POST the tarball to a registry.
 /// This is the v0.5.0 protocol: `POST /registry/packs` with `Content-Type: application/x-cairnpkg`
 /// and an optional `Authorization: Bearer <token>`.
 fn publish(tarball: &Path, registry: &str) -> Result<()> {
@@ -302,7 +302,7 @@ fn publish(tarball: &Path, registry: &str) -> Result<()> {
     Ok(())
 }
 
-/// `cairn pack revoke <name> <version> --registry <url>` — unpublish a pack from a registry.
+/// `cairn pack revoke <name> <version> --registry <url>` --- unpublish a pack from a registry.
 fn revoke(name: &str, version: &str, registry: &str) -> Result<()> {
     let url = format!(
         "{}/registry/packs/{name}/{version}",
@@ -325,7 +325,7 @@ fn revoke(name: &str, version: &str, registry: &str) -> Result<()> {
     Ok(())
 }
 
-/// `cairn pack search <query> --registry <url>` — search a registry's pack catalog.
+/// `cairn pack search <query> --registry <url>` --- search a registry's pack catalog.
 fn search(query: &str, registry: &str) -> Result<()> {
     let encoded = percent_encode(query);
     let url = format!(

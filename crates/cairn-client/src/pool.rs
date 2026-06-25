@@ -1,4 +1,4 @@
-//! `cairn contribute` / `cairn pull` — federate sanitized knowledge with a shared Cairn pool.
+//! `cairn contribute` / `cairn pull` --- federate sanitized knowledge with a shared Cairn pool.
 //!
 //! Privacy-first by construction: `contribute` sanitizes every local memory and only ever sends
 //! the shareable, redacted forms (the server re-sanitizes again as a hard trust boundary). `pull`

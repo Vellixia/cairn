@@ -1,14 +1,14 @@
-﻿//! `cairn doctor` â€” diagnostic check that the local environment is wired up correctly.
+//! `cairn doctor` --- diagnostic check that the local environment is wired up correctly.
 //!
 //! The diagnostic is deliberately cheap: it never talks to the network, never opens the
 //! store unless HelixDB is configured, and runs in <100 ms. `doctor --fix` adds a small
-//! repair pass â€” it creates missing data dirs, writes a default `.env` next to a fresh
+//! repair pass --- it creates missing data dirs, writes a default `.env` next to a fresh
 //! binary, and prints guidance for things it can't fix automatically.
 //!
 //! Exit codes:
-//! - 0  â€” all green
-//! - 1  â€” one or more failures (printed above)
-//! - 2  â€” usage error (invalid flags)
+//! - 0  --- all green
+//! - 1  --- one or more failures (printed above)
+//! - 2  --- usage error (invalid flags)
 
 use anyhow::Result;
 use std::path::PathBuf;
@@ -72,7 +72,7 @@ pub fn run(opts: DoctorOptions) -> Diagnosis {
     // 2. HelixDB URL is set (required for local mode).
     checks.push(check_helix_url(&cfg));
 
-    // 3. Embedder provider â€” `hashing` is the zero-deps default; warn if the user picked
+    // 3. Embedder provider --- `hashing` is the zero-deps default; warn if the user picked
     //    something heavier that needs more config.
     checks.push(check_embedder(&cfg));
 
@@ -87,7 +87,7 @@ pub fn run(opts: DoctorOptions) -> Diagnosis {
         checks.push(check_store_open(&cfg));
     }
 
-    // 7. Agent detection â€” what agents would `setup --all` wire today?
+    // 7. Agent detection --- what agents would `setup --all` wire today?
     checks.push(check_agents());
 
     finalize(checks)
@@ -97,7 +97,7 @@ fn finalize(checks: Vec<Check>) -> Diagnosis {
     let diag = Diagnosis { checks };
     // Print in a stable order.
     for c in &diag.checks {
-        let sym = if c.ok { "âœ“" } else { "âœ—" };
+        let sym = if c.ok { "OK" } else { "FAIL" };
         eprintln!("  {sym} {:<14} {}", c.name, c.detail);
     }
     if diag.ok() {
@@ -148,7 +148,7 @@ fn check_data_dir(cfg: &cairn_core::Config, fix: bool) -> Check {
         Check {
             name: "data dir",
             ok: false,
-            detail: format!("{} (missing â€” run with --fix to create)", dir.display()),
+            detail: format!("{} (missing --- run with --fix to create)", dir.display()),
         }
     }
 }
@@ -167,7 +167,7 @@ fn check_helix_url(cfg: &cairn_core::Config) -> Check {
                 Check {
                     name: "helix url",
                     ok: true,
-                    detail: "(unset â€” running in remote-proxy mode)".into(),
+                    detail: "(unset --- running in remote-proxy mode)".into(),
                 }
             } else {
                 Check {
@@ -188,7 +188,7 @@ fn check_embedder(cfg: &cairn_core::Config) -> Check {
         return Check {
             name: "embedder",
             ok: true,
-            detail: "(skipped — running in remote-proxy mode)".into(),
+            detail: "(skipped --- running in remote-proxy mode)".into(),
         };
     }
     match cfg.embed.provider.as_str() {
@@ -234,12 +234,12 @@ fn check_embedder(cfg: &cairn_core::Config) -> Check {
 }
 
 fn check_secret_key(cfg: &cairn_core::Config) -> Check {
-    // In remote-proxy mode the client never handles auth — no secret key needed.
+    // In remote-proxy mode the client never handles auth --- no secret key needed.
     if std::env::var_os("CAIRN_SERVER").is_some() {
         return Check {
             name: "secret key",
             ok: true,
-            detail: "(skipped — running in remote-proxy mode)".into(),
+            detail: "(skipped --- running in remote-proxy mode)".into(),
         };
     }
     match cfg.secret_key.as_ref() {
@@ -252,7 +252,7 @@ fn check_secret_key(cfg: &cairn_core::Config) -> Check {
             name: "secret key",
             ok: false,
             detail: format!(
-                "{} bytes (need >= 32 â€” set CAIRN_SECRET_KEY to a 32+ byte value)",
+                "{} bytes (need >= 32 --- set CAIRN_SECRET_KEY to a 32+ byte value)",
                 k.len()
             ),
         },
@@ -269,28 +269,40 @@ fn check_remote_server() -> Check {
     match server {
         Some(s) if !s.trim().is_empty() => {
             let token = std::env::var("CAIRN_TOKEN").ok();
+            let (ok, detail) = match token {
+                Some(t) if !t.is_empty() => {
+                    // Validate the token with a real request.
+                    let url = format!("{}/api/auth/me", s.trim_end_matches('/'));
+                    match ureq::get(&url)
+                        .set("Authorization", &format!("Bearer {t}"))
+                        .call()
+                    {
+                        Ok(resp) if resp.status() == 200 => {
+                            (true, format!("{s} (token valid)"))
+                        }
+                        Ok(resp) => {
+                            let status = resp.status();
+                            let body = resp.into_string().unwrap_or_default();
+                            (false, format!("{s} (token rejected: HTTP {status} -- {body})"))
+                        }
+                        Err(e) => {
+                            (false, format!("{s} (token check failed: {e})"))
+                        }
+                    }
+                }
+                Some(_) => (false, format!("{s} (CAIRN_TOKEN is empty)")),
+                None => (false, format!("{s} (no CAIRN_TOKEN -- every request will 401)")),
+            };
             Check {
                 name: "remote server",
-                ok: token.is_some(),
-                detail: format!(
-                    "{}{}",
-                    s,
-                    if let Some(t) = token {
-                        if !t.is_empty() {
-                            " (token set)".to_string()
-                        } else {
-                            " (CAIRN_TOKEN is empty)".to_string()
-                        }
-                    } else {
-                        " (no CAIRN_TOKEN â€” every request will 401)".to_string()
-                    }
-                ),
+                ok,
+                detail,
             }
         }
         _ => Check {
             name: "remote server",
             ok: true,
-            detail: "(unset â€” local mode)".into(),
+            detail: "(unset -- local mode)".into(),
         },
     }
 }
@@ -388,7 +400,7 @@ fn home_dir() -> Option<PathBuf> {
         .filter(|p| !p.as_os_str().is_empty())
 }
 
-/// Build a short-lived full diagnosis from a list of checks â€” used by the `doctor`
+/// Build a short-lived full diagnosis from a list of checks --- used by the `doctor`
 /// CLI entry point so it can return a non-zero exit code on failure.
 pub fn run_and_exit(opts: DoctorOptions) -> Result<()> {
     let diag = run(opts);
@@ -396,7 +408,7 @@ pub fn run_and_exit(opts: DoctorOptions) -> Result<()> {
 }
 
 /// Strip userinfo (`user:pass@`) from a URL for safe logging. Pure-string operation;
-/// doesn't parse the URL â€” that's fine for diagnostics.
+/// doesn't parse the URL --- that's fine for diagnostics.
 fn redact_url(url: &str) -> String {
     if let Some(at_idx) = url.find('@') {
         if let Some(scheme_end) = url.find("://") {
@@ -408,7 +420,7 @@ fn redact_url(url: &str) -> String {
     url.to_string()
 }
 
-/// Simple command runner for `doctor --fix` — used by tests to spawn the actual binary
+/// Simple command runner for `doctor --fix` --- used by tests to spawn the actual binary
 /// and verify that a missing data dir gets created.
 #[doc(hidden)]
 fn _run_cli_placeholder() {}

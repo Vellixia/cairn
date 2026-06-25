@@ -1,8 +1,8 @@
-//! `cairn bench` — measure the token savings Cairn delivers on a real codebase.
+//! `cairn bench` --- measure the token savings Cairn delivers on a real codebase.
 //!
 //! Three of the engine's mechanisms turned into hard numbers: AST signature outlines (reading code
 //! as structure), the re-read killer (cached unchanged reads), and shell-output compression. Every
-//! one is lossless — the full original is always one `expand` away.
+//! one is lossless --- the full original is always one `expand` away.
 
 use crate::State;
 use anyhow::Result;
@@ -44,11 +44,11 @@ impl OutlineBench {
 }
 
 pub fn run(state: &State, root: &Path) -> Result<()> {
-    println!("Cairn bench — measured on {}\n", root.display());
+    println!("Cairn bench --- measured on {}\n", root.display());
 
     let files = collect_code_files(root, 800);
 
-    // 1) AST outlines — read each file full vs. signatures-only.
+    // 1) AST outlines --- read each file full vs. signatures-only.
     let ctx = ContextEngine::new(state.store.clone());
     let o = bench_outline(&ctx, &files)?;
     println!("AST outlines (lean code reading)");
@@ -61,7 +61,7 @@ pub fn run(state: &State, root: &Path) -> Result<()> {
         println!("  saved: {:.1}%\n", o.saved_pct());
     }
 
-    // 2) Re-read killer — read the biggest file twice through a fresh cache.
+    // 2) Re-read killer --- read the biggest file twice through a fresh cache.
     if let Some(big) = files
         .iter()
         .max_by_key(|f| std::fs::metadata(f).map(|m| m.len()).unwrap_or(0))
@@ -73,25 +73,25 @@ pub fn run(state: &State, root: &Path) -> Result<()> {
         let name = big.file_name().and_then(|n| n.to_str()).unwrap_or("");
         println!("Re-reading an unchanged file ({name})");
         println!(
-            "  first read ~{} tokens → cached re-read ~{} tokens ({saved:.1}% saved)\n",
+            "  first read ~{} tokens -> cached re-read ~{} tokens ({saved:.1}% saved)\n",
             thousands(first.est_tokens),
             thousands(again.est_tokens),
         );
     }
 
-    // 3) Shell-output compression — on a representative verbose log.
+    // 3) Shell-output compression --- on a representative verbose log.
     let sample = sample_shell_output();
     let c = state.shell.compress("cargo test", &sample)?;
     println!("Shell-output compression (sample verbose log)");
     println!(
-        "  {} lines → {} lines ({:.1}% saved)\n",
+        "  {} lines -> {} lines ({:.1}% saved)\n",
         c.original_lines,
         c.compressed_lines,
         c.saved_ratio * 100.0,
     );
 
     println!(
-        "Every compression here is lossless — the full original is retained and one `expand` away."
+        "Every compression here is lossless --- the full original is retained and one `expand` away."
     );
     Ok(())
 }
@@ -154,7 +154,7 @@ fn pct_saved(before: usize, after: usize) -> f64 {
     }
 }
 
-/// Group a number with thousands separators (e.g. `124300` → `124,300`).
+/// Group a number with thousands separators (e.g. `124300` -> `124,300`).
 fn thousands(n: usize) -> String {
     let s = n.to_string();
     let bytes = s.as_bytes();
@@ -168,7 +168,7 @@ fn thousands(n: usize) -> String {
     out
 }
 
-/// A representative verbose test log — mostly noise a human never needs to see.
+/// A representative verbose test log --- mostly noise a human never needs to see.
 fn sample_shell_output() -> String {
     let mut s = String::from("   Compiling cairn-core v0.1.0\n   Compiling cairn-store v0.1.0\n");
     for i in 0..150 {

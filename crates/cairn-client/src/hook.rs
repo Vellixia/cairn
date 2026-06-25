@@ -58,7 +58,7 @@ fn run_inner(cfg: &Config, event: &str) -> Result<()> {
                 .map(|m| format!("- ({}) {}\n", m.kind.as_str(), m.content))
                 .collect();
             if !lines.is_empty() {
-                ctx.push_str("Cairn memory — what you already know here:\n");
+                ctx.push_str("Cairn memory --- what you already know here:\n");
                 for l in lines {
                     ctx.push_str(&l);
                 }
@@ -84,7 +84,7 @@ fn run_inner(cfg: &Config, event: &str) -> Result<()> {
             nm.tier = Some(MemoryTier::Episodic);
             nm.importance = Some(0.3);
             let _ = state.mem.remember(nm);
-            // Learn standing preferences stated in the prompt ("always use X", …).
+            // Learn standing preferences stated in the prompt ("always use X", ...).
             let _ = state.profile.capture_from_prompt(prompt);
         }
         "PostToolUse" => {
@@ -103,7 +103,7 @@ fn run_inner(cfg: &Config, event: &str) -> Result<()> {
                         let _ = state.guard.note_verify(&report);
                         if !report.is_clean() {
                             let ctx = format!(
-                                "⚠ Cairn guard ({:?}): {}. The pre-edit original is retained — recover it with Cairn `expand {}` if this was unintended.",
+                                "[!] Cairn guard ({:?}): {}. The pre-edit original is retained --- recover it with Cairn `expand {}` if this was unintended.",
                                 report.risk,
                                 report.message,
                                 report.baseline_hash.as_deref().unwrap_or("")
@@ -201,7 +201,7 @@ fn run_remote(rc: &RemoteClient, event: &str, payload: &Value) -> Result<()> {
                         })
                         .collect();
                     if !non_pref.is_empty() {
-                        ctx.push_str("Cairn memory — what you already know here:\n");
+                        ctx.push_str("Cairn memory --- what you already know here:\n");
                         for m in non_pref {
                             let kind =
                                 m.get("kind").and_then(Value::as_str).unwrap_or("note");

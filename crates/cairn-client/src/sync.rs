@@ -1,4 +1,4 @@
-//! `cairn sync` — exchange memory with another Cairn server (last-write-wins).
+//! `cairn sync` --- exchange memory with another Cairn server (last-write-wins).
 //!
 //! Pulls remote memories changed since our last sync, then pushes our local changes. The sync
 //! watermark uses the server's clock to avoid drift; conflicts resolve by `updated_at` (newest
