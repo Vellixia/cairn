@@ -640,6 +640,7 @@ dependencies = [
  "cairn-memory",
  "cairn-proactive",
  "cairn-profile",
+ "cairn-registry",
  "cairn-share",
  "cairn-shell",
  "cairn-store",

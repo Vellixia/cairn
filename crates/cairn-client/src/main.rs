@@ -292,6 +292,21 @@ enum PackAction {
         #[arg(long)]
         registry: String,
     },
+    /// Revoke (unpublish) a pack from a registry.
+    Revoke {
+        name: String,
+        version: String,
+        /// Registry base URL.
+        #[arg(long)]
+        registry: String,
+    },
+    /// Search a registry's pack catalog.
+    Search {
+        query: String,
+        /// Registry base URL.
+        #[arg(long)]
+        registry: String,
+    },
 }
 
 pub struct State {
@@ -525,6 +540,20 @@ async fn main() -> anyhow::Result<()> {
                 }
                 PackAction::Publish { tarball, registry } => {
                     pack(pack::PackCmd::Publish { tarball, registry })?;
+                }
+                PackAction::Revoke {
+                    name,
+                    version,
+                    registry,
+                } => {
+                    pack(pack::PackCmd::Revoke {
+                        name,
+                        version,
+                        registry,
+                    })?;
+                }
+                PackAction::Search { query, registry } => {
+                    pack(pack::PackCmd::Search { query, registry })?;
                 }
             }
         }
