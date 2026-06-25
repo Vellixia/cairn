@@ -235,6 +235,8 @@ enum MemoryCmd {
     },
     /// Promote working-tier memories to a semantic crystal (agentmemory pattern).
     Crystallize,
+    /// Re-embed all memories using the current provider (use after switching CAIRN_EMBED_PROVIDER).
+    ReEmbed,
 }
 
 #[derive(Subcommand)]
@@ -464,6 +466,7 @@ async fn main() -> anyhow::Result<()> {
             match action {
                 MemoryCmd::Timeline { limit } => extra::memory_timeline(&s, limit)?,
                 MemoryCmd::Crystallize => extra::memory_crystallize(&s)?,
+                MemoryCmd::ReEmbed => extra::memory_re_embed(&s)?,
             }
         }
         Cmd::Search { query, limit } => {

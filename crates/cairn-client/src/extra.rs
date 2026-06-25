@@ -82,6 +82,26 @@ pub fn memory_crystallize(s: &State) -> Result<()> {
     Ok(())
 }
 
+pub fn memory_re_embed(s: &State) -> Result<()> {
+    let memories = s.store.all_memories().context("loading memories")?;
+    let total = memories.len();
+    if total == 0 {
+        println!("no memories to re-embed");
+        return Ok(());
+    }
+    eprintln!("re-embedding {total} memories…");
+    let mut done = 0usize;
+    for m in &memories {
+        s.store.upsert_memory(m).context("upserting memory")?;
+        done += 1;
+        if done % 50 == 0 || done == total {
+            eprintln!("  {done}/{total}");
+        }
+    }
+    println!("re-embedded {done} memories");
+    Ok(())
+}
+
 pub fn metrics(s: &State) -> Result<()> {
     let memories = s.store.count_memories().unwrap_or(0);
     let checkpoints = s.guard.list_checkpoints().map(|v| v.len()).unwrap_or(0);

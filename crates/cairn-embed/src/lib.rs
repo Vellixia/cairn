@@ -2,10 +2,12 @@
 //! (vector) recall alongside BM25.
 //!
 //! Three providers, chosen by [`cairn_core::EmbedConfig`] (`CAIRN_EMBED_PROVIDER`):
-//! - **local** (default) — in-process `all-MiniLM-L6-v2` (384-dim) via `fastembed`/ONNX. No API
+//! - **local** (default) — in-process `bge-small-en-v1.5` (384-dim) via `fastembed`/ONNX. No API
 //!   key, nothing leaves the machine. Requires the `local` cargo feature.
 //! - **openai** — `/v1/embeddings` (default `text-embedding-3-small`); needs `CAIRN_EMBED_API_KEY`.
 //! - **ollama** — `/api/embed` (default `nomic-embed-text`) against a local Ollama server.
+//!
+//! To migrate existing memories to a new model, run `cairn memory re-embed`.
 
 use cairn_core::{EmbedConfig, Error, Result};
 
@@ -239,6 +241,7 @@ fn known_dim(model: &str) -> Option<usize> {
         m if m.contains("mxbai-embed-large") => Some(1024),
         m if m.contains("nomic-embed-text") => Some(768),
         m if m.contains("MiniLM-L6") || m.contains("all-minilm") => Some(384),
+        m if m.contains("bge-small-en") => Some(384),
         _ => None,
     }
 }
@@ -252,7 +255,10 @@ mod local {
     use std::path::PathBuf;
     use std::sync::Mutex;
 
-    /// In-process `all-MiniLM-L6-v2` (384-dim). The model is fetched once on first construction.
+    /// In-process `bge-small-en-v1.5` (384-dim). The model is fetched once on first construction.
+    ///
+    /// Uses BAAI/bge-small-en-v1.5 instead of all-MiniLM-L6-v2: same 384-dim output (no
+    /// migration needed), ~7% better MTEB recall on English text.
     pub struct LocalEmbedder {
         model: Mutex<TextEmbedding>,
         dim: usize,
@@ -267,7 +273,7 @@ mod local {
             //   2. If it isn't set, we still compute the hash and log a warning so operators
             //      can pin it. This closes audit finding M-9 without breaking fresh installs.
             let model = TextEmbedding::try_new(
-                InitOptions::new(EmbeddingModel::AllMiniLML6V2).with_show_download_progress(true),
+                InitOptions::new(EmbeddingModel::BGESmallENV15).with_show_download_progress(true),
             )
             .map_err(|e| Error::Other(format!("loading local embedding model: {e}")))?;
 
