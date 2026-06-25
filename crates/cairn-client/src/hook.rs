@@ -32,6 +32,10 @@ fn run_inner(cfg: &Config, event: &str) -> Result<()> {
     let _ = std::io::stdin().read_to_string(&mut input);
     let payload: Value = serde_json::from_str(input.trim()).unwrap_or(Value::Null);
 
+    if let Some(rc) = RemoteClient::new() {
+        return run_remote(&rc, event, &payload);
+    }
+
     let state = State::open(cfg)?;
 
     match event {
@@ -113,6 +117,140 @@ fn run_inner(cfg: &Config, event: &str) -> Result<()> {
         "SessionEnd" => {
             // Turn the session's transient working memory into durable tiers.
             let _ = state.mem.consolidate();
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Remote-proxy mode: when CAIRN_SERVER is set the client has no local store.
+// We replicate the hook behaviour over HTTP instead.
+// ---------------------------------------------------------------------------
+
+struct RemoteClient {
+    server: String,
+    token: Option<String>,
+}
+
+impl RemoteClient {
+    fn new() -> Option<Self> {
+        let server = std::env::var("CAIRN_SERVER").ok()?;
+        if server.trim().is_empty() {
+            return None;
+        }
+        Some(Self {
+            server,
+            token: std::env::var("CAIRN_TOKEN")
+                .ok()
+                .filter(|t| !t.is_empty()),
+        })
+    }
+
+    fn get(&self, path: &str) -> ureq::Request {
+        let url = format!("{}{}", self.server, path);
+        let req = ureq::get(&url);
+        if let Some(t) = &self.token {
+            req.set("Authorization", &format!("Bearer {t}"))
+        } else {
+            req
+        }
+    }
+
+    fn post(&self, path: &str) -> ureq::Request {
+        let url = format!("{}{}", self.server, path);
+        let req = ureq::post(&url);
+        if let Some(t) = &self.token {
+            req.set("Authorization", &format!("Bearer {t}"))
+        } else {
+            req
+        }
+    }
+}
+
+fn run_remote(rc: &RemoteClient, event: &str, payload: &Value) -> Result<()> {
+    match event {
+        "SessionStart" => {
+            let mut ctx = String::new();
+            if let Ok(resp) = rc.get("/api/guard/anchor").call() {
+                if let Ok(v) = resp.into_json::<Value>() {
+                    if let Some(anchor) = v.get("anchor").and_then(Value::as_str) {
+                        ctx.push_str(&format!("Current task: {anchor}\n\n"));
+                    }
+                }
+            }
+            if let Ok(resp) = rc.get("/api/profile").call() {
+                if let Ok(mems) = resp.into_json::<Vec<Value>>() {
+                    if !mems.is_empty() {
+                        ctx.push_str("Standing preferences:\n");
+                        for m in &mems {
+                            if let Some(c) = m.get("content").and_then(Value::as_str) {
+                                ctx.push_str(&format!("- {c}\n"));
+                            }
+                        }
+                        ctx.push('\n');
+                    }
+                }
+            }
+            if let Ok(resp) = rc.get("/api/memory/wakeup").query("limit", "12").call() {
+                if let Ok(mems) = resp.into_json::<Vec<Value>>() {
+                    let non_pref: Vec<_> = mems
+                        .iter()
+                        .filter(|m| {
+                            m.get("kind").and_then(Value::as_str) != Some("preference")
+                        })
+                        .collect();
+                    if !non_pref.is_empty() {
+                        ctx.push_str("Cairn memory — what you already know here:\n");
+                        for m in non_pref {
+                            let kind =
+                                m.get("kind").and_then(Value::as_str).unwrap_or("note");
+                            let content =
+                                m.get("content").and_then(Value::as_str).unwrap_or("");
+                            ctx.push_str(&format!("- ({kind}) {content}\n"));
+                        }
+                    }
+                }
+            }
+            if !ctx.is_empty() {
+                emit(event, &ctx);
+            }
+        }
+        "UserPromptSubmit" => {
+            let prompt = payload.get("prompt").and_then(Value::as_str).unwrap_or("");
+            if prompt.trim().is_empty() {
+                return Ok(());
+            }
+            if let Ok(resp) = rc
+                .get("/api/context/assemble")
+                .query("q", prompt)
+                .query("budget", "1200")
+                .call()
+            {
+                if let Ok(v) = resp.into_json::<Value>() {
+                    let has_results = v
+                        .get("included")
+                        .and_then(Value::as_array)
+                        .is_some_and(|a| !a.is_empty());
+                    if has_results {
+                        if let Some(ctx) = v.get("context").and_then(Value::as_str) {
+                            if !ctx.is_empty() {
+                                emit(event, ctx);
+                            }
+                        }
+                    }
+                }
+            }
+            let _ = rc.post("/api/memory").send_json(json!({
+                "content": prompt,
+                "kind": "note",
+                "tier": "episodic",
+                "importance": 0.3
+            }));
+        }
+        // PostToolUse: no local baseline in remote mode; skip silently.
+        "SessionEnd" => {
+            let _ = rc.post("/api/memory/consolidate").send_json(json!({}));
         }
         _ => {}
     }

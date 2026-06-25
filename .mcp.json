@@ -4,7 +4,10 @@
       "args": [
         "mcp"
       ],
-      "command": "cairn"
+      "command": "cairn",
+      "env": {
+        "CAIRN_SERVER": "https://cairn.andresholivin.dev"
+      }
     }
   }
 }

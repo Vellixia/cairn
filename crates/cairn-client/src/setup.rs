@@ -99,10 +99,19 @@ fn install_agent(
     server: Option<&str>,
     token: Option<&str>,
 ) -> Result<()> {
+    // When --token is not passed explicitly, fall back to the CAIRN_TOKEN env var so the
+    // token is embedded in the agent config without requiring the user to pass it every time.
+    let env_token = token
+        .is_none()
+        .then(|| std::env::var("CAIRN_TOKEN").ok())
+        .flatten()
+        .filter(|t| !t.is_empty());
+    let effective_token = token.or(env_token.as_deref());
+
     match id {
-        "claude-code" => install_claude_code(project, server, token)?,
-        "codex" => install_codex(home, server, token)?,
-        "opencode" => install_opencode(server, token)?,
+        "claude-code" => install_claude_code(project, server, effective_token)?,
+        "codex" => install_codex(home, server, effective_token)?,
+        "opencode" => install_opencode(server, effective_token)?,
         other => anyhow::bail!("unknown agent '{other}'. Supported: {}.", KNOWN.join(", ")),
     }
     crate::rules::write_for(id, project)?;
@@ -112,14 +121,15 @@ fn install_agent(
 /// OpenCode's global config path. OpenCode follows XDG-ish directories on all platforms:
 /// `~/.config/opencode/opencode.json` on Windows and Unix alike.
 fn opencode_config_path() -> PathBuf {
-    let config_home = std::env::var_os("XDG_CONFIG_HOME")
+    // XDG_CONFIG_HOME already IS the config root (e.g. ~/.config); don't add .config again.
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+        return PathBuf::from(xdg).join("opencode").join("opencode.json");
+    }
+    let base = std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
-        .unwrap_or_else(|| home_dir().unwrap_or_else(|| PathBuf::from(".")));
-    config_home
-        .join(".config")
-        .join("opencode")
-        .join("opencode.json")
+        .or_else(home_dir)
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join(".config").join("opencode").join("opencode.json")
 }
 
 fn install_opencode(server: Option<&str>, token: Option<&str>) -> Result<()> {
@@ -661,8 +671,9 @@ mod tests {
         fs::write(h.join(".codex/config.toml"), "").unwrap();
         assert!(detect("codex", p, Some(h)));
 
-        fs::create_dir_all(h.join(".config/opencode")).unwrap();
-        fs::write(h.join(".config/opencode/opencode.json"), "{}").unwrap();
+        // XDG_CONFIG_HOME is the config root itself; opencode.json lives directly under it.
+        fs::create_dir_all(h.join("opencode")).unwrap();
+        fs::write(h.join("opencode/opencode.json"), "{}").unwrap();
         assert!(detect("opencode", p, Some(h)));
     }
 

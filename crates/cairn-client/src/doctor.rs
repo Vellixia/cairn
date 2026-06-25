@@ -183,6 +183,14 @@ fn check_helix_url(cfg: &cairn_core::Config) -> Check {
 }
 
 fn check_embedder(cfg: &cairn_core::Config) -> Check {
+    // In remote-proxy mode the server handles embedding; client needs no embedder config.
+    if std::env::var_os("CAIRN_SERVER").is_some() {
+        return Check {
+            name: "embedder",
+            ok: true,
+            detail: "(skipped — running in remote-proxy mode)".into(),
+        };
+    }
     match cfg.embed.provider.as_str() {
         "hashing" => Check {
             name: "embedder",
@@ -226,6 +234,14 @@ fn check_embedder(cfg: &cairn_core::Config) -> Check {
 }
 
 fn check_secret_key(cfg: &cairn_core::Config) -> Check {
+    // In remote-proxy mode the client never handles auth — no secret key needed.
+    if std::env::var_os("CAIRN_SERVER").is_some() {
+        return Check {
+            name: "secret key",
+            ok: true,
+            detail: "(skipped — running in remote-proxy mode)".into(),
+        };
+    }
     match cfg.secret_key.as_ref() {
         Some(k) if k.len() >= 32 => Check {
             name: "secret key",
@@ -345,14 +361,15 @@ fn detect_agent(id: &str, project: &std::path::Path, home: Option<&std::path::Pa
 }
 
 fn opencode_config_path() -> PathBuf {
-    let config_home = std::env::var_os("XDG_CONFIG_HOME")
+    // XDG_CONFIG_HOME already IS the config root (e.g. ~/.config); don't add .config again.
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+        return PathBuf::from(xdg).join("opencode").join("opencode.json");
+    }
+    let base = std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
-        .unwrap_or_else(|| home_dir().unwrap_or_else(|| PathBuf::from(".")));
-    config_home
-        .join(".config")
-        .join("opencode")
-        .join("opencode.json")
+        .or_else(home_dir)
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join(".config").join("opencode").join("opencode.json")
 }
 
 fn codex_config_path(home: Option<&std::path::Path>) -> PathBuf {
@@ -478,6 +495,8 @@ mod tests {
 
     #[test]
     fn doctor_check_embedder_rejects_unknown_provider() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("CAIRN_SERVER");
         let mut cfg = cairn_core::Config::resolve(None).unwrap();
         cfg.embed.provider = "magic".into();
         let c = check_embedder(&cfg);
@@ -537,6 +556,8 @@ mod tests {
 
     #[test]
     fn doctor_check_secret_key_short_is_fail() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("CAIRN_SERVER");
         let mut cfg = cairn_core::Config::resolve(None).unwrap();
         cfg.secret_key = Some(b"short".to_vec());
         let c = check_secret_key(&cfg);
