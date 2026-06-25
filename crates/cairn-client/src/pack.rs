@@ -1,4 +1,4 @@
-﻿//! `cairn pack` â€” build / inspect / install / publish `.cairnpkg` bundles (Sprint 11).
+//! `cairn pack` â€” build / inspect / install / publish `.cairnpkg` bundles (Sprint 11).
 
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
@@ -313,9 +313,7 @@ fn revoke(name: &str, version: &str, registry: &str) -> Result<()> {
     if let Some(t) = token {
         req = req.set("Authorization", &format!("Bearer {t}"));
     }
-    let resp = req
-        .call()
-        .with_context(|| format!("DELETE {url}"))?;
+    let resp = req.call().with_context(|| format!("DELETE {url}"))?;
     let body: serde_json::Value = resp
         .into_json()
         .context("parsing registry response as JSON")?;
