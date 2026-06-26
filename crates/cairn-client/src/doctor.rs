@@ -139,7 +139,7 @@ fn check_remote_server() -> Check {
             let (ok, detail) = match token {
                 Some(t) if !t.is_empty() => {
                     // Validate the token with a real request.
-                    let url = format!("{}/api/auth/me", s.trim_end_matches('/'));
+                    let url = format!("{}/api/memory/wakeup?limit=1", s.trim_end_matches('/'));
                     match ureq::get(&url)
                         .set("Authorization", &format!("Bearer {t}"))
                         .call()

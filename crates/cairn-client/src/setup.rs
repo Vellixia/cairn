@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 /// Verify that a device token is valid before writing it to agent config files.
 /// Makes a `GET /api/auth/me` request and returns Ok(()) on success.
 fn validate_token(server: &str, token: &str) -> Result<()> {
-    let url = format!("{}/api/auth/me", server.trim_end_matches('/'));
+    let url = format!("{}/api/memory/wakeup?limit=1", server.trim_end_matches('/'));
     match ureq::get(&url)
         .set("Authorization", &format!("Bearer {token}"))
         .call()
