@@ -44,7 +44,7 @@ if (-not (Get-Variable -Name 'E2E_Total' -Scope Global -ErrorAction SilentlyCont
 $Global:E2E_FailFast = if ($env:CAIRN_E2E_FAILFAST -ne '0') { $true } else { $false }
 $Global:E2E_Token = $Global:E2E_Token
 $Global:E2E_BinCairn   = $Global:E2E_BinCairn
-$Global:E2E_BinCairnCli = $Global:E2E_BinCairnCli
+$Global:E2E_BinCairnCli = $Global:E2E_BinCairn
 $Global:E2E_BaseUrl   = $Global:E2E_BaseUrl
 $Global:E2E_DataDir   = $Global:E2E_DataDir
 $Global:E2E_LogFile   = $Global:E2E_LogFile
