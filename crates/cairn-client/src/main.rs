@@ -1,25 +1,51 @@
-//! The `cairn` binary - connects AI agents to a Cairn server.
+//! The `cairn` binary - connects AI agents to a remote Cairn server.
+//!
+//! All operations go through the server API. No local HelixDB, no local
+//! store, no local engines. The client is a thin HTTP wrapper with agent
+//! config management.
+//!
+//! Quick start:
+//!   cairn onboard --server https://cairn.example.com --token <jwt>
 
 use std::io::IsTerminal;
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use anyhow::Context;
-use cairn_core::Config;
+use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
 mod doctor;
 mod hook;
 mod onboard;
+mod reset;
 mod rules;
 mod setup;
+mod status;
 mod update;
+
+/// Returns the server URL from CAIRN_SERVER env, or an error with guidance.
+fn require_server() -> Result<String> {
+    std::env::var("CAIRN_SERVER")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| {
+            anyhow!(
+                "No Cairn server configured.\n\
+                 Set CAIRN_SERVER in your environment, or run:\n\
+                 \n  cairn onboard --server <url> --token <jwt>\n\
+                 \n  Or: cairn setup --all --server <url> --token <jwt>"
+            )
+        })
+}
 
 #[derive(Parser)]
 #[command(
     name = "cairn",
     version,
-    about = "Cairn client - connect AI agents to a Cairn server"
+    about = "Cairn client - connect AI agents to a Cairn server.",
+    long_about = "Cairn gives AI agents persistent memory, lean context, and edit safety.\n\n\
+                  Getting started:\n\
+                  \n  cairn onboard --server <url> --token <jwt>\n\
+                  \n  See https://github.com/Vellixia/Cairn for docs."
 )]
 struct Cli {
     #[arg(long, global = true)]
@@ -30,12 +56,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Verify the local setup and server connectivity.
+    /// Verify server connectivity and agent configuration.
     Doctor {
         #[arg(long)]
         fix: bool,
+        /// Output machine-readable JSON.
+        #[arg(long)]
+        json: bool,
     },
-    /// Zero-prompt setup for first-run installs.
+    /// First-run setup: doctor + wire all agents.
     Onboard {
         #[arg(long)]
         skip_agents: bool,
@@ -44,8 +73,9 @@ enum Cmd {
         #[arg(long)]
         token: Option<String>,
     },
-    /// Configure an agent (or --all detected agents) to use a Cairn server.
+    /// Configure an agent (or --all detected) to use a Cairn server.
     Setup {
+        /// Agent name: claude-code, codex, or opencode.
         agent: Option<String>,
         #[arg(long)]
         all: bool,
@@ -53,6 +83,18 @@ enum Cmd {
         server: Option<String>,
         #[arg(long)]
         token: Option<String>,
+    },
+    /// Show server connection, token info, and agent status.
+    Status {
+        /// Output machine-readable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove Cairn-managed entries from all agent config files.
+    Reset {
+        /// Only show what would be removed.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Run the MCP server over stdio (launched by AI agents).
     Mcp,
@@ -66,32 +108,8 @@ enum Cmd {
     },
 }
 
-pub struct State {
-    pub store: Arc<cairn_store::Store>,
-    pub mem: Arc<cairn_memory::MemoryEngine>,
-    pub guard: Arc<cairn_guard::Guard>,
-    pub asm: Arc<cairn_assemble::Assembler>,
-    pub shell: Arc<cairn_shell::ShellCompressor>,
-    pub profile: Arc<cairn_profile::Profile>,
-}
-
-impl State {
-    fn open(cfg: &Config) -> anyhow::Result<Self> {
-        let store = Arc::new(cairn_store::Store::open(cfg)?);
-        let mem = Arc::new(cairn_memory::MemoryEngine::new(store.clone()));
-        Ok(Self {
-            store: store.clone(),
-            mem: mem.clone(),
-            guard: Arc::new(cairn_guard::Guard::new(store.clone())),
-            asm: Arc::new(cairn_assemble::Assembler::new(mem.clone())),
-            shell: Arc::new(cairn_shell::ShellCompressor::new(store.clone())),
-            profile: Arc::new(cairn_profile::Profile::new(mem)),
-        })
-    }
-}
-
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_target(false)
@@ -99,13 +117,13 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let cfg = Config::resolve(cli.data_dir).context("resolving data dir")?;
 
     match cli.cmd {
-        Cmd::Doctor { fix } => {
+        Cmd::Doctor { fix, json } => {
             doctor::run_and_exit(doctor::DoctorOptions {
                 fix,
                 interactive: std::io::stdout().is_terminal(),
+                json,
             })?;
         }
         Cmd::Onboard {
@@ -126,10 +144,18 @@ async fn main() -> anyhow::Result<()> {
             server,
             token,
         } => setup::run(agent.as_deref(), all, server.as_deref(), token.as_deref())?,
+        Cmd::Status { json } => {
+            status::run(json)?;
+        }
+        Cmd::Reset { dry_run } => {
+            reset::run(dry_run)?;
+        }
         Cmd::Mcp => {
+            let _server = require_server()?;
+            let cfg = cairn_core::Config::resolve(cli.data_dir).context("resolving config")?;
             cairn_mcp::serve_stdio(&cfg)?;
         }
-        Cmd::Hook { event } => hook::run(&cfg, &event)?,
+        Cmd::Hook { event } => hook::run(&event)?,
         Cmd::Upgrade { check } => update::run(check)?,
     }
     Ok(())

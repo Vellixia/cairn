@@ -301,7 +301,7 @@ single static Rust binary - **no Node/Python/runtime** to install.
   manual token juggling), then runs **`cairn setup --all`** to **auto-detect installed agents**
   (Claude Code, Codex, OpenCode) and write their
   **hook + MCP config** to point at your server.
-- Manual paths exist too: `cairn pair <code>`, `cairn setup <agent>`, `cairn doctor`.
+- Manual paths exist too: `cairn onboard --server <url> --token <jwt>`, `cairn setup <agent>`, `cairn doctor`.
 
 **3. Connectivity (self-host reality):** default LAN; for remote devices, recommend
   **Tailscale/VPN** (zero-config, private) or an optional TLS reverse proxy. The web UI detects

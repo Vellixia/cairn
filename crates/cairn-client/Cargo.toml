@@ -12,23 +12,18 @@ path = "src/main.rs"
 
 [features]
 default = []
-# Build the binary with in-process local embeddings (all-MiniLM-L6-v2). Enabled in the Docker and
-# release builds so `CAIRN_EMBED_PROVIDER=local` (the default) works out of the box.
-embed-local = ["cairn-store/local"]
+# The client is a thin remote-only HTTP wrapper. No local engines, no HelixDB.
 
 [dependencies]
 cairn-core.workspace = true
-cairn-store.workspace = true
-cairn-memory.workspace = true
-cairn-guard.workspace = true
-cairn-assemble.workspace = true
-cairn-shell.workspace = true
-cairn-profile.workspace = true
 cairn-mcp.workspace = true
 clap.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true
+serde.workspace = true
+base64.workspace = true
+chrono.workspace = true
 self_update.workspace = true
 ureq.workspace = true
 tracing-subscriber.workspace = true

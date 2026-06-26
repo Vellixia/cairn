@@ -52,14 +52,14 @@ it to `cairn setup <agent> --token <token>` to wire an AI agent.
 
 ### Generate a pair code
 
-`/settings/pair` -> click "Generate pair code" -> a 10-minute code appears.
-Enter it on the new device:
+`/settings/pair` -> click "Generate pair code" or create a token directly.
+Copy the JWT and run on the new device:
 
 ```sh
-cairn pair CAIRN-XXXX-XXXX --server http://your-host:7777
+cairn onboard --server http://your-host:7777 --token <jwt>
 ```
 
-The pair code is single-use; regenerate as needed.
+The token is single-issue; regenerate as needed.
 
 ### Rotate the admin password
 

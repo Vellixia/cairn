@@ -95,7 +95,7 @@ time**. Cairn fixes that.
 
 ## Proof
 
-Run **`cairn bench`** on your own repo. Measured on Cairn's own `crates/` (25 files):
+Measured on Cairn's own `crates/` (25 files):
 
 | Mechanism | Before | After | Saved |
 |---|---|---|---|
@@ -152,9 +152,8 @@ See [Architecture - Connecting an agent](docs/ARCHITECTURE.md#connecting-an-agen
 ### 4. Verify
 
 ```sh
-cairn doctor              # checks the local setup
-cairn remember "we use rust and helixdb"
-cairn recall "rust"       # should return the memory you just saved
+cairn doctor              # checks server connectivity + agent config
+cairn status              # shows server, token, and agent status
 ```
 
 ## OpenCode quickstart
@@ -191,10 +190,10 @@ After that, OpenCode's tool palette includes `cairn_recall`, `cairn_remember`, `
   file); the original is one `cairn_expand` away. No context lost.
 - **Drift detection.** Each session records checkpoints; `cairn doctor --fix`
   re-anchors the model on long tasks.
-- **One-line rules.** `cairn prefer always use ripgrep` becomes a memory that
+- **One-line rules.** The MCP `prefer` tool turns "always use ripgrep" into a memory that
   re-fires on every session until contradicted.
 - **Proactive recall.** The intent classifier fires before each turn - if the prompt
-  has recall cues, relevant memories are auto-injected. No manual `recall` needed.
+  has recall cues, relevant memories are auto-injected. No manual recall needed.
 
 ## Status
 

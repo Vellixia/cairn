@@ -87,8 +87,7 @@ For production deployments:
 2. Set `CAIRN_TLS_CERT` and `CAIRN_TLS_KEY` to a valid PEM pair (e.g. `mkcert`).
 3. Bind to `127.0.0.1` or `localhost`, or use a reverse proxy. Never bind a
    plain-HTTP Cairn to a public address with `CAIRN_INSECURE=1`.
-4. Enable E2E encryption for sync (`cairn sync --e2e --passphrase ...`).
-5. Audit `~/.config/cairn/.env` and the docker `.env` - never commit
+4. Audit `~/.config/cairn/.env` and the docker `.env` - never commit
    `MINIO_ROOT_PASSWORD` defaults, never use `minioadmin/minioadmin`.
 6. Rotate `CAIRN_SECRET_KEY` at least once a year; rotating invalidates all
    device tokens AND the savings ledger HMAC signatures. Plan for a brief

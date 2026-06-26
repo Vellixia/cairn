@@ -41,12 +41,7 @@ crates). The single-admin/cookie-session model from 0.4.0 is unchanged - this re
 
 ### 1. Back up before you touch anything
 
-```sh
-cairn export dump.json           # personal memories (deterministic order)
-cairn export --share share.json  # sanitized bundle (safe to inspect)
-```
-
-If you were on 0.3.x, both flows are unchanged from 0.4.0.
+Use the dashboard export feature or the `GET /api/share/export` API endpoint.
 
 ### 2. Point at HelixDB
 
@@ -121,8 +116,8 @@ Cairn's `docker-compose.yml` uses **two** Docker volumes:
 **Critical:** `docker compose down` preserves both volumes. `docker compose down -v`
 **wipes both**. Losing `helix-minio` silently invalidates every device token (the JWT
 signatures still pass, but the token ids no longer exist in HelixDB - every request
-returns 401 `"unknown_token"`). Recovery: mint new tokens via the dashboard or
-`cairn pair`, then re-run `cairn setup` on each device.
+returns 401 `"unknown_token"`). Recovery: mint new tokens via the dashboard,
+then re-run `cairn setup --server <url> --token <jwt>` on each device.
 
 ## Token rotation after secret-key or data changes
 
