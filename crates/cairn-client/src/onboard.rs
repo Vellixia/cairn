@@ -1,10 +1,10 @@
 //! `cairn onboard` - zero-prompt setup for first-run installs.
 //!
-//! 1. **Verify the binary** - `cairn doctor` (status + diagnostics).
+//! 1. **Verify the binary** - `cairn doctor` (connectivity + diagnostics).
 //! 2. **Detect agents** - `cairn setup --all` for every supported agent.
 //! 3. **Print a summary** - what was detected, what was wired, what the next step is.
 //!
-//! `--server <url>` and `--token <tok>` control remote-proxy mode.
+//! Pass `--server <url>` and `--token <jwt>` to configure remote access.
 
 use anyhow::{Context, Result};
 use std::io::IsTerminal;
@@ -31,6 +31,7 @@ pub fn run(opts: OnboardOptions) -> Result<()> {
     let mut diag = doctor::run(doctor::DoctorOptions {
         fix: opts.fix,
         interactive,
+        json: false,
     });
 
     // If --fix is set and we got failures, re-run to confirm.
@@ -38,6 +39,7 @@ pub fn run(opts: OnboardOptions) -> Result<()> {
         diag = doctor::run(doctor::DoctorOptions {
             fix: false,
             interactive,
+            json: false,
         });
     }
 
@@ -64,10 +66,10 @@ pub fn run(opts: OnboardOptions) -> Result<()> {
     // 3. Summary.
     eprintln!("Done. Next steps:");
     if let Some(s) = &opts.server {
-        eprintln!("  - server  : {s}");
+        eprintln!("  - server: {s}");
     }
-    eprintln!("  - open the dashboard at http://127.0.0.1:7777 (or your configured host)");
-    eprintln!("  - first agent action: cairn remember \"your first memory\"");
+    eprintln!("  - open a session in your AI agent (Claude Code, OpenCode, Codex)");
+    eprintln!("  - check status with `cairn status`");
 
     Ok(())
 }

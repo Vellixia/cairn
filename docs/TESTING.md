@@ -1,5 +1,11 @@
 # Cairn End-to-End Testing
 
+> **Note:** This document records test results from v0.5.0-v0.6.1. CLI commands like
+> `cairn pair`, `cairn sync`, `cairn export`, `cairn import`, `cairn contribute`,
+> `cairn pull`, and `cairn bench` have been removed in v0.6.4. The equivalent
+> functionality is now available via MCP tools (for AI agents) or the dashboard
+> (for humans). See `AGENTS.md` for the current CLI command set.
+
 Live testing of every Cairn use case through OpenCode MCP, direct MCP stdio, and the CLI.
 Tests run against the Docker-backed Cairn server (`http://localhost:7777`).
 

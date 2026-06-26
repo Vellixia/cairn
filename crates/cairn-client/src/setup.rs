@@ -83,7 +83,7 @@ pub fn run(
         } else if let Some(srv) = effective_server {
             println!("\nCairn server: {srv}. Open a session in your agent.");
         } else {
-            println!("\nStart the server with `docker compose up -d`, then open a session in your agent.");
+            println!("\nNo server configured. Run with --server <url> or set CAIRN_SERVER.");
         }
         return Ok(());
     }
@@ -99,7 +99,7 @@ pub fn run(
     if let Some(srv) = effective_server {
         println!("\nCairn server: {srv}. Open a session in your agent.");
     } else {
-        println!("\nStart the server with `docker compose up -d`, then open a session in your agent.");
+        println!("\nNo server configured. Run with --server <url> or set CAIRN_SERVER.");
     }
     Ok(())
 }
@@ -351,26 +351,41 @@ fn write_codex_hooks(home: &Path, server: Option<&str>, token: Option<&str>) -> 
         }
     };
 
-    add_hook("SessionStart", json!({
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [{ "type": "command", "command": "cairn hook SessionStart" }]
-    }));
+    add_hook(
+        "SessionStart",
+        json!({
+            "matcher": "startup|resume|clear|compact",
+            "hooks": [{ "type": "command", "command": "cairn hook SessionStart" }]
+        }),
+    );
 
-    add_hook("UserPromptSubmit", json!({
-        "hooks": [{ "type": "command", "command": "cairn hook UserPromptSubmit" }]
-    }));
+    add_hook(
+        "UserPromptSubmit",
+        json!({
+            "hooks": [{ "type": "command", "command": "cairn hook UserPromptSubmit" }]
+        }),
+    );
 
-    add_hook("PostToolUse", json!({
-        "matcher": "apply_patch|Edit|Write",
-        "hooks": [{ "type": "command", "command": "cairn hook PostToolUse" }]
-    }));
+    add_hook(
+        "PostToolUse",
+        json!({
+            "matcher": "apply_patch|Edit|Write",
+            "hooks": [{ "type": "command", "command": "cairn hook PostToolUse" }]
+        }),
+    );
 
-    add_hook("Stop", json!({
-        "hooks": [{ "type": "command", "command": "cairn hook SessionEnd" }]
-    }));
+    add_hook(
+        "Stop",
+        json!({
+            "hooks": [{ "type": "command", "command": "cairn hook SessionEnd" }]
+        }),
+    );
 
     write_json(&hooks_path, &Value::Object(hooks_cfg))?;
-    println!("  - {}  (hooks: SessionStart, UserPromptSubmit, PostToolUse, Stop)", hooks_path.display());
+    println!(
+        "  - {}  (hooks: SessionStart, UserPromptSubmit, PostToolUse, Stop)",
+        hooks_path.display()
+    );
     let _ = (server, token);
     Ok(())
 }

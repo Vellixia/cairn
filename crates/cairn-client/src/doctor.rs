@@ -1,9 +1,9 @@
-//! `cairn doctor` - diagnostic check that the local environment is wired up correctly.
+//! `cairn doctor` - diagnostic check for server connectivity and agent config.
 //!
-//! The diagnostic is deliberately cheap: it never talks to the network, never opens the
-//! store unless HelixDB is configured, and runs in <100 ms. `doctor --fix` adds a small
-//! repair pass - it creates missing data dirs, writes a default `.env` next to a fresh
-//! binary, and prints guidance for things it can't fix automatically.
+//! Checks:
+//! - Data directory exists and is writable
+//! - Remote server is reachable with a valid token (calls /api/memory/wakeup)
+//! - Supported AI agents are detected
 //!
 //! Exit codes:
 //! - 0  - all green
@@ -21,6 +21,9 @@ pub struct DoctorOptions {
     /// here is dead. Kept for API stability with future toggles.
     #[allow(dead_code)]
     pub interactive: bool,
+    /// Output machine-readable JSON instead of human-readable text.
+    #[allow(dead_code)]
+    pub json: bool,
 }
 
 /// Outcome of `doctor run`. Used by `onboard` to decide whether to proceed.

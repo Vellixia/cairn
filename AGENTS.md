@@ -59,9 +59,9 @@ cd web && npm install && npm run dev   # :3000 -> API on :7777
 | Binary | Lives in | Purpose |
 |--------|----------|---------|
 | `cairn-server` (in-container) | Docker image (`cairn-api` bin) | Long-lived server: binds :7777, serves the API + web UI, runs env-only admin bootstrap |
-| `cairn` (host) | release tarball (`cairn-client` crate) | Client: `mcp`, `setup`, `rules`, `run`, `hook`, `remember`, `recall`, `sync`, `pair`, `bench`, `pack`, `graph`, `memory`, `search`, `doctor`, `onboard` |
+| `cairn` (host) | release tarball (`cairn-client` crate) | Client: `mcp`, `setup`, `onboard`, `doctor`, `hook`, `status`, `reset`, `upgrade` |
 
-**Dep graph:** `cairn-core` -> `cairn-store` -> domain crates (`context`, `memory`, `guard`, `shell`, `profile`, `embed`, `share`, `assemble`) -> `cairn-mcp` -> `cairn-api` -> `cairn-client`.
+**Dep graph:** `cairn-core` -> `cairn-store` -> domain crates (`context`, `memory`, `guard`, `shell`, `profile`, `embed`, `share`, `assemble`) -> `cairn-mcp` -> `cairn-api`. `cairn-client` is a thin remote-only HTTP wrapper (no local engines).
 
 **Config precedence:** CLI flag > env var > project `.env` > `~/.config/cairn/.env` > built-in default.
 
