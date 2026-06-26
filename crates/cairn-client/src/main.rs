@@ -83,6 +83,10 @@ enum Cmd {
         server: Option<String>,
         #[arg(long)]
         token: Option<String>,
+        /// Write per-project config (Claude Code: `.mcp.json` in cwd) instead
+        /// of the global default (`~/.claude.json`).
+        #[arg(long)]
+        project: bool,
     },
     /// Show server connection, token info, and agent status.
     Status {
@@ -143,7 +147,14 @@ async fn main() -> Result<()> {
             all,
             server,
             token,
-        } => setup::run(agent.as_deref(), all, server.as_deref(), token.as_deref())?,
+            project,
+        } => setup::run(
+            agent.as_deref(),
+            all,
+            server.as_deref(),
+            token.as_deref(),
+            project,
+        )?,
         Cmd::Status { json } => {
             status::run(json)?;
         }

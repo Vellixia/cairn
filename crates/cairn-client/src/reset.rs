@@ -5,6 +5,8 @@ use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::setup::is_any_cairn_hook;
+
 pub fn run(dry_run: bool) -> Result<()> {
     let project = std::env::current_dir()?;
     let home = home_dir();
@@ -51,10 +53,28 @@ pub fn run(dry_run: bool) -> Result<()> {
             if servers.remove("cairn").is_some() {
                 removed += 1;
                 if dry_run {
-                    println!("Would remove cafrom: .mcp.json");
+                    println!("Would remove cairn from: .mcp.json");
                 } else {
                     write_json(&project.join(".mcp.json"), &json!(cfg))?;
-                    println!("Removed cafrom: .mcp.json");
+                    println!("Removed cairn from: .mcp.json");
+                }
+            }
+        }
+    }
+
+    // Remove cairn entry from user-level `~/.claude.json` when global setup was used.
+    if let Some(h) = home.as_deref() {
+        let global = h.join(".claude.json");
+        if let Ok(mut cfg) = read_object(&global) {
+            if let Some(servers) = cfg.get_mut("mcpServers").and_then(|v| v.as_object_mut()) {
+                if servers.remove("cairn").is_some() {
+                    removed += 1;
+                    if dry_run {
+                        println!("Would remove cairn MCP from: {}", global.display());
+                    } else {
+                        write_json(&global, &json!(cfg))?;
+                        println!("Removed cairn MCP from: {}", global.display());
+                    }
                 }
             }
         }
@@ -94,7 +114,22 @@ pub fn run(dry_run: bool) -> Result<()> {
                 for events in hooks_obj.values_mut() {
                     if let Some(arr) = events.as_array_mut() {
                         let before = arr.len();
-                        arr.retain(|entry| !is_cairn_hook(entry));
+                        arr.retain(|group| {
+                            // Drop the group entirely if any of its inner commands is
+                            // a cairn hook (handles both bare `cairn` and absolute-path
+                            // duplicates left by multiple setup runs).
+                            !group
+                                .get("hooks")
+                                .and_then(|v| v.as_array())
+                                .map(|hs| {
+                                    hs.iter().any(|h| {
+                                        h.get("command")
+                                            .and_then(|c| c.as_str())
+                                            .is_some_and(is_any_cairn_hook)
+                                    })
+                                })
+                                .unwrap_or(false)
+                        });
                         if arr.len() < before {
                             cleaned = true;
                         }
@@ -140,10 +175,36 @@ pub fn run(dry_run: bool) -> Result<()> {
                 if mcp.remove("cairn").is_some() {
                     removed += 1;
                     if dry_run {
-                        println!("Would remove cafrom: {}", oc_path.display());
+                        println!("Would remove cairn from: {}", oc_path.display());
                     } else {
                         write_json(&oc_path, &json!(oc_cfg))?;
-                        println!("Removed cafrom: {}", oc_path.display());
+                        println!("Removed cairn from: {}", oc_path.display());
+                    }
+                }
+            }
+            // Also strip the cairn plugin entry from opencode.json's `plugin` array
+            // so re-setup leaves a clean slate.
+            if let Some(plugins) = oc_cfg.get_mut("plugin").and_then(|v| v.as_array_mut()) {
+                let before = plugins.len();
+                plugins.retain(|p| {
+                    p.as_str()
+                        .map(|s| {
+                            let normalized = s.replace('\\', "/").to_ascii_lowercase();
+                            !normalized.ends_with("/plugins/cairn.js")
+                                && normalized != "plugins/cairn.js"
+                        })
+                        .unwrap_or(true)
+                });
+                if plugins.len() < before {
+                    removed += 1;
+                    if dry_run {
+                        println!(
+                            "Would remove cairn plugin entry from: {}",
+                            oc_path.display()
+                        );
+                    } else {
+                        write_json(&oc_path, &json!(oc_cfg))?;
+                        println!("Removed cairn plugin entry from: {}", oc_path.display());
                     }
                 }
             }
@@ -170,16 +231,6 @@ pub fn run(dry_run: bool) -> Result<()> {
         println!("\nRemoved {} Cairn entries.", removed);
     }
     Ok(())
-}
-
-fn is_cairn_hook(entry: &serde_json::Value) -> bool {
-    entry
-        .get("hooks")
-        .and_then(|v| v.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|h| h.get("command"))
-        .and_then(|c| c.as_str())
-        .is_some_and(|c| c.starts_with("cairn hook"))
 }
 
 fn remove_managed_block(text: &str) -> Option<String> {

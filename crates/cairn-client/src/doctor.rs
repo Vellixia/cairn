@@ -70,6 +70,7 @@ pub fn run(opts: DoctorOptions) -> Diagnosis {
     checks.push(check_data_dir(&cfg, opts.fix));
     checks.push(check_remote_server());
     checks.push(check_agents());
+    checks.push(check_config_health());
 
     finalize(checks)
 }
@@ -199,6 +200,105 @@ fn check_agents() -> Check {
             name: "agents",
             ok: true,
             detail: format!("detected: {}", found.join(", ")),
+        }
+    }
+}
+
+/// Detect duplicate cairn hook entries across all agent config files and warn
+/// when the OpenCode plugin is on disk but not registered in `opencode.json`.
+/// These are symptoms of stale state that `cairn setup` can repair on re-run.
+fn check_config_health() -> Check {
+    let home = home_dir();
+    let mut issues: Vec<String> = Vec::new();
+
+    // Codex hooks.json duplicate count
+    if let Some(h) = home.as_deref() {
+        let hooks_path = h.join(".codex").join("hooks.json");
+        if hooks_path.exists() {
+            if let Ok(text) = std::fs::read_to_string(&hooks_path) {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
+                    if let Some(obj) = v.get("hooks").and_then(|o| o.as_object()) {
+                        for (event, arr) in obj {
+                            if let Some(arr) = arr.as_array() {
+                                let cairn = arr
+                                    .iter()
+                                    .filter(|g| {
+                                        g.get("hooks")
+                                            .and_then(|hs| hs.as_array())
+                                            .map(|hs| {
+                                                hs.iter().any(|h| {
+                                                    h.get("command")
+                                                        .and_then(|c| c.as_str())
+                                                        .map(|c| {
+                                                            let lower = c.to_ascii_lowercase();
+                                                            lower.contains("cairn")
+                                                                && lower.contains("hook")
+                                                        })
+                                                        .unwrap_or(false)
+                                                })
+                                            })
+                                            .unwrap_or(false)
+                                    })
+                                    .count();
+                                if cairn > 1 {
+                                    issues.push(format!(
+                                        "{event}: {cairn} cairn hooks (dedup with `cairn setup codex`)"
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // OpenCode plugin file present but not registered in opencode.json
+    if let Some(h) = home.as_deref() {
+        let plugin_path = h
+            .join(".config")
+            .join("opencode")
+            .join("plugins")
+            .join("cairn.js");
+        if plugin_path.exists() {
+            let cfg = opencode_config_path();
+            let registered = cfg
+                .as_path()
+                .exists()
+                .then(|| std::fs::read_to_string(&cfg).ok())
+                .flatten()
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| {
+                    v.get("plugin").and_then(|p| p.as_array()).map(|arr| {
+                        arr.iter().any(|p| {
+                            p.as_str().is_some_and(|s| {
+                                let n = s.replace('\\', "/").to_ascii_lowercase();
+                                n.ends_with("/plugins/cairn.js") || n == "plugins/cairn.js"
+                            })
+                        })
+                    })
+                })
+                .unwrap_or(false);
+            if !registered {
+                issues.push(
+                    "opencode plugin on disk but not registered in opencode.json (`cairn setup opencode` to fix)"
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    if issues.is_empty() {
+        Check {
+            name: "config health",
+            ok: true,
+            detail: "ok".into(),
+        }
+    } else {
+        Check {
+            name: "config health",
+            ok: false,
+            detail: issues.join("; "),
         }
     }
 }

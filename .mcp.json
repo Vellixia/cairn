@@ -6,8 +6,8 @@
       ],
       "command": "cairn",
       "env": {
-        "CAIRN_SERVER": "https://cairn.andresholivin.dev",
-        "CAIRN_TOKEN": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJqdGkiOiI0Mjk3NGRmZjgwM2U0NjU4YWY0NzQ4MmI2Yjc4ZGE0MSIsInN1YiI6InRlc3QxIiwiaWF0IjoxNzgyMzk5MzcyLCJzY29wZSI6IndyaXRlIn0.NO619PclBlcG_b3M07QuMJMvwa-xpAfIhAqwCbn_QR8"
+        "CAIRN_SERVER": "https://cairn.example.com",
+        "CAIRN_TOKEN": ""
       }
     }
   }
