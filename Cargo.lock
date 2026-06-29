@@ -553,6 +553,7 @@ version = "0.6.6"
 dependencies = [
  "cairn-core",
  "cairn-store",
+ "chrono",
  "serde",
  "similar",
  "tempfile",
@@ -653,11 +654,14 @@ name = "cairn-memory"
 version = "0.6.6"
 dependencies = [
  "cairn-core",
+ "cairn-rerank",
  "cairn-store",
  "chrono",
  "serde",
+ "serde_json",
  "tempfile",
  "tracing",
+ "ureq 2.12.1",
  "uuid",
 ]
 
@@ -754,6 +758,18 @@ dependencies = [
  "tracing",
  "ureq 2.12.1",
  "uuid",
+]
+
+[[package]]
+name = "cairn-rerank"
+version = "0.6.6"
+dependencies = [
+ "cairn-core",
+ "fastembed",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]

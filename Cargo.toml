@@ -22,6 +22,7 @@ members = [
     "crates/cairn-api",
     "crates/cairn-mcp",
     "crates/cairn-client",
+    "crates/cairn-rerank",
 ]
 
 [workspace.package]
@@ -58,6 +59,7 @@ cairn-embed = { path = "crates/cairn-embed" }
 cairn-api = { path = "crates/cairn-api" }
 cairn-mcp = { path = "crates/cairn-mcp" }
 cairn-client = { path = "crates/cairn-client" }
+cairn-rerank = { path = "crates/cairn-rerank" }
 
 # Pinned to specific minor versions via tilde (~major.minor) so CI can fail
 # loudly via `cargo build --locked` if Cargo.lock drifts outside that minor.

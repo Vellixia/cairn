@@ -6,11 +6,13 @@ import RecallPage from "./recall/page";
 import WakeupPage from "./wakeup/page";
 import GraphPage from "./graph/page";
 import SavingsPage from "./savings/page";
+import CompressionPage from "./compression/page";
 
 const MEMORY_TABS: HubTab[] = [
   { id: "wakeup", label: "Wakeup", content: <WakeupPage /> },
   { id: "recall", label: "Recall", content: <RecallPage /> },
   { id: "graph", label: "Graph", content: <GraphPage /> },
+  { id: "compression", label: "Compression Lab", content: <CompressionPage /> },
   { id: "savings", label: "Savings", content: <SavingsPage /> },
 ];
 

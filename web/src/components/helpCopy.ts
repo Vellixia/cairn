@@ -33,6 +33,17 @@ export const HELP: Record<string, HelpCopy> = {
     impact:
       "Wakeup is the default context Cairn loads for a fresh agent. Trimming here directly shrinks every future session's token bill.",
   },
+  "/memory/compression": {
+    title: "Compression Lab",
+    what: "Side-by-side comparison of all four read modes for a single file.",
+    how: [
+      "Type a file path (e.g. crates/cairn-core/src/lib.rs) and press Render.",
+      "Each column shows one mode's view, its token count, and the savings vs full.",
+      "The cheapest mode is highlighted as 'best' - prefer that for context-bounded reads.",
+    ],
+    impact:
+      "Choosing the right mode per file can cut agent token spend 50-90%. Files with strong structure (Rust, Python, Go) compress aggressively; data files and small snippets do not.",
+  },
   "/memory/graph": {
     title: "Memory graph",
     what: "A live map of relationships between memories, extracted from their edges.",

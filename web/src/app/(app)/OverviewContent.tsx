@@ -19,6 +19,7 @@ import { ReliabilitySparkline } from "@/components/ReliabilitySparkline";
 import { MemoryTierDonut } from "@/components/MemoryTierDonut";
 import { SourceMixBar } from "@/components/SourceMixBar";
 import { LastAdminActionCard } from "@/components/LastAdminActionCard";
+import { ContextPressureGauge } from "@/components/ContextPressureGauge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -104,7 +105,9 @@ export function OverviewContent() {
           icon={Plug}
           hint={
             metrics.data
-              ? `Wakeup ${tokensSaved.toLocaleString()} . Recall ${tokensSavedRecall.toLocaleString()}`
+              ? (metrics.data.usd_saved !== undefined && metrics.data.usd_saved > 0
+                  ? `≈ $${metrics.data.usd_saved.toFixed(2)} saved . Wakeup ${tokensSaved.toLocaleString()} . Recall ${tokensSavedRecall.toLocaleString()}`
+                  : `Wakeup ${tokensSaved.toLocaleString()} . Recall ${tokensSavedRecall.toLocaleString()}`)
               : "Last 7 days . see chart"
           }
           tone={tokensSavedTotal > 0 ? "positive" : "info"}
@@ -125,6 +128,22 @@ export function OverviewContent() {
         </Card>
         <Card className="p-5 md:col-span-2">
           <ReliabilitySparkline />
+        </Card>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <ContextPressureGauge />
+        <Card className="p-5">
+          <CardHeader className="p-0">
+            <CardTitle className="text-sm font-semibold tracking-tight">Context savings</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 pt-4">
+            <p className="text-xs text-muted-foreground">
+              Compressed reads + delta diffs + cached re-reads keep the agent&apos;s working
+              set small. Watch for <code className="font-mono">Force compression</code> /
+              <code className="font-mono"> Evict</code> recommendations above 75% utilization.
+            </p>
+          </CardContent>
         </Card>
       </section>
 
