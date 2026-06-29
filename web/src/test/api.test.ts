@@ -9,7 +9,15 @@ describe("resolveApiBase", () => {
   })
 
   it("falls back to localhost when no env or window", () => {
-    expect(resolveApiBase()).toBe("http://127.0.0.1:7777")
+    // jsdom provides a `window`, so temporarily shadow it to test the SSR/CLI fallback.
+    const g = globalThis as { window?: unknown };
+    const original = g.window;
+    g.window = undefined;
+    try {
+      expect(resolveApiBase()).toBe("http://127.0.0.1:7777");
+    } finally {
+      g.window = original;
+    }
   })
 })
 

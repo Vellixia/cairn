@@ -61,7 +61,11 @@ pub fn generate_architecture_report(graph: &MemoryGraph) -> ArchitectureReport {
             }
         })
         .collect();
-    bridges.sort_by(|a, b| b.centrality.partial_cmp(&a.centrality).unwrap_or(std::cmp::Ordering::Equal));
+    bridges.sort_by(|a, b| {
+        b.centrality
+            .partial_cmp(&a.centrality)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let cycles = find_cycles(&graph.edges);
 
@@ -181,7 +185,7 @@ pub fn find_god_nodes(
         })
         .collect();
 
-    entries.sort_by(|a, b| b.edge_count.cmp(&a.edge_count));
+    entries.sort_by_key(|e| std::cmp::Reverse(e.edge_count));
     entries.truncate(top_n);
     entries
 }
@@ -268,9 +272,7 @@ pub fn find_cycles(edges: &[MemoryGraphEdge]) -> Vec<Vec<String>> {
 }
 
 /// Betweenness centrality approximation via BFS from each node.
-pub fn compute_bridge_centrality(
-    edges: &[MemoryGraphEdge],
-) -> HashMap<String, f64> {
+pub fn compute_bridge_centrality(edges: &[MemoryGraphEdge]) -> HashMap<String, f64> {
     let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
     for edge in edges {
         adj.entry(edge.source.as_str())
@@ -326,8 +328,7 @@ pub fn compute_bridge_centrality(
             if let Some(neighbors) = adj.get(v) {
                 for &w in neighbors {
                     if distance[w] == distance[v] + 1 {
-                        let contrib =
-                            num_shortest[v] / num_shortest[w] * (1.0 + dependency[w]);
+                        let contrib = num_shortest[v] / num_shortest[w] * (1.0 + dependency[w]);
                         *dependency.get_mut(v).unwrap() += contrib;
                     }
                 }
@@ -366,18 +367,8 @@ fn build_language_breakdown(nodes: &[MemoryGraphNode]) -> HashMap<String, usize>
 fn find_surprising_connections(graph: &MemoryGraph) -> Vec<String> {
     let mut surprising: Vec<String> = Vec::new();
     for edge in &graph.edges {
-        let source_ext = edge
-            .source
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_lowercase();
-        let target_ext = edge
-            .target
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_lowercase();
+        let source_ext = edge.source.rsplit('.').next().unwrap_or("").to_lowercase();
+        let target_ext = edge.target.rsplit('.').next().unwrap_or("").to_lowercase();
         if !source_ext.is_empty() && !target_ext.is_empty() && source_ext != target_ext {
             surprising.push(format!(
                 "{} ({}) <-> {} ({}) [{}]",
@@ -390,6 +381,7 @@ fn find_surprising_connections(graph: &MemoryGraph) -> Vec<String> {
 }
 
 /// Render the Markdown string.
+#[allow(clippy::too_many_arguments)]
 fn render_markdown(
     file_count: usize,
     edge_count: usize,
@@ -428,7 +420,11 @@ fn render_markdown(
     // Communities
     md.push_str("## Communities\n\n");
     for (i, community) in god_nodes.chunks(10).enumerate() {
-        md.push_str(&format!("Cluster {}: {} members (sampled)\n", i + 1, community.len()));
+        md.push_str(&format!(
+            "Cluster {}: {} members (sampled)\n",
+            i + 1,
+            community.len()
+        ));
     }
     md.push_str(&format!("\nTotal communities: {}\n\n", community_count));
 
@@ -437,7 +433,10 @@ fn render_markdown(
     md.push_str("| Node | Degree | Kind |\n");
     md.push_str("|------|--------|------|\n");
     for gn in god_nodes {
-        md.push_str(&format!("| {} | {} | {} |\n", gn.name, gn.edge_count, gn.kind));
+        md.push_str(&format!(
+            "| {} | {} | {} |\n",
+            gn.name, gn.edge_count, gn.kind
+        ));
     }
     md.push('\n');
 

@@ -14,6 +14,8 @@ use std::sync::Arc;
 
 pub mod llm_consolidator;
 pub use llm_consolidator::{apply_decay, Insight, LlmConsolidator, ProceduralStep, SemanticFact};
+pub mod analysis;
+pub use analysis::{generate_architecture_report, ArchitectureReport, BridgeEntry, GodNodeEntry};
 pub mod followup_tracker;
 pub use followup_tracker::FollowupTracker;
 pub mod gotcha_tracker;
@@ -390,6 +392,14 @@ impl MemoryEngine {
         let mut all = self.store.all_memories()?;
         all.retain(|m| m.kind == kind);
         Ok(all)
+    }
+
+    /// P2.6: activity heatmap - returns a `YYYY-MM-DD -> count` map for the last
+    /// `days` days. Powers `/api/memory/heatmap`. Backed by `analysis::activity_heatmap`
+    /// which filters by `created_at` cutoff.
+    pub fn activity_heatmap(&self, days: usize) -> Result<std::collections::HashMap<String, u32>> {
+        let all = self.store.all_memories()?;
+        Ok(crate::analysis::activity_heatmap(&all, days))
     }
 
     /// Consolidate memory across the four tiers (working -> episodic -> semantic -> procedural),

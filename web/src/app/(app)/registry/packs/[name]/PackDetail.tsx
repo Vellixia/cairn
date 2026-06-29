@@ -47,6 +47,12 @@ function scopeLabel(scope: string) {
   );
 }
 
+function formatSize(bytes: number | undefined): string {
+  if (bytes === undefined || bytes === null) return "—";
+  if (bytes > 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+  return `${(bytes / 1024).toFixed(0)} KiB`;
+}
+
 export default function PackDetail({ name }: { name: string }) {
   const versions = useQuery({
     queryKey: qk.registryPack(name),
@@ -86,7 +92,7 @@ export default function PackDetail({ name }: { name: string }) {
   const metadataRows = [
     { label: "Author", value: latest?.author },
     { label: "Description", value: latest?.description },
-    { label: "Scope", value: latest ? scopeLabel(latest.scope) : null },
+    { label: "Scope", value: latest ? scopeLabel(latest.scope ?? "public") : null },
     { label: "Origin", value: latest?.origin },
     {
       label: "Signature",
@@ -159,15 +165,13 @@ export default function PackDetail({ name }: { name: string }) {
                       </code>
                     </TableCell>
                     <TableCell className="text-sm tabular-nums text-muted-foreground">
-                      {v.size_bytes > 1024 * 1024
-                        ? `${(v.size_bytes / 1024 / 1024).toFixed(1)} MiB`
-                        : `${(v.size_bytes / 1024).toFixed(0)} KiB`}
+                      {formatSize(v.size_bytes)}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {v.memory_count}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {new Date(v.stored_at).toLocaleDateString()}
+                      {v.stored_at ? new Date(v.stored_at).toLocaleDateString() : "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

@@ -79,7 +79,7 @@ const columns: ColumnDef<RegistryPackMeta>[] = [
   {
     accessorKey: "scope",
     header: "Scope",
-    cell: ({ row }) => scopeBadge(row.original.scope),
+    cell: ({ row }) => scopeBadge(row.original.scope ?? "public"),
   },
   {
     accessorKey: "has_ed25519_signature",
@@ -107,7 +107,9 @@ const columns: ColumnDef<RegistryPackMeta>[] = [
     header: "Published",
     cell: ({ row }) => (
       <span className="text-sm text-muted-foreground">
-        {new Date(row.original.stored_at).toLocaleDateString()}
+        {row.original.stored_at
+          ? new Date(row.original.stored_at).toLocaleDateString()
+          : "—"}
       </span>
     ),
   },

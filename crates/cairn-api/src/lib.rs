@@ -244,6 +244,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/memory/:id/reinforce", post(reinforce_memory))
         .route("/api/memory/crystallize", post(crystallize))
         .route("/api/memory/graph", get(memory_graph))
+        .route("/api/memory/architecture-report", get(architecture_report))
+        .route("/api/memory/heatmap", get(memory_heatmap))
         .route("/api/guard/verify", post(verify))
         .route("/api/guard/anchor", get(get_anchor).post(post_anchor))
         .route("/api/guard/checkpoint", post(create_checkpoint))
@@ -1053,6 +1055,29 @@ async fn memory_graph(
     State(s): State<AppState>,
 ) -> Result<Json<cairn_memory::MemoryGraph>, ApiError> {
     Ok(Json(s.mem.graph()?))
+}
+
+// P2.6: heatmap (last 365 days by default, ?days=N to override).
+async fn memory_heatmap(
+    State(s): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<HeatmapQuery>,
+) -> Result<Json<std::collections::HashMap<String, u32>>, ApiError> {
+    let days = q.days.unwrap_or(365).clamp(1, 3650);
+    Ok(Json(s.mem.activity_heatmap(days)?))
+}
+
+// P2.4: structural analysis of the memory graph.
+async fn architecture_report(
+    State(s): State<AppState>,
+) -> Result<Json<cairn_memory::ArchitectureReport>, ApiError> {
+    let graph = s.mem.graph()?;
+    Ok(Json(cairn_memory::generate_architecture_report(&graph)))
+}
+
+#[derive(Default, Deserialize)]
+struct HeatmapQuery {
+    /// Window size in days. Default 365. Capped to 3650 (10y).
+    days: Option<usize>,
 }
 
 // -- drift + sessions handlers (v0.5.0 Sprint 4) -----------------------------------------
