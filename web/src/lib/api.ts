@@ -285,3 +285,27 @@ export interface LedgerEntry {
   cost_usd_saved: number;
   signature: string;
 }
+
+// P2.3 Compression Lab - one response carries all 4 read modes for side-by-side.
+export interface CompressionModeView {
+  mode: "auto" | "full" | "signatures" | "map";
+  status: string;
+  view: string;
+  note: string;
+  bytes: number;
+  est_tokens: number;
+  savings_vs_full: number;
+  hash: string;
+}
+
+export interface CompressionDemo {
+  path: string;
+  language: string | null;
+  raw_bytes: number;
+  raw_lines: number;
+  raw_tokens: number;
+  views: CompressionModeView[];
+  best_mode: string;
+  total_savings_tokens: number;
+  savings_ratio: number;
+}

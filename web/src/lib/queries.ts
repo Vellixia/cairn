@@ -8,6 +8,7 @@ import {
   type DeviceTokenMeta,
   type Health,
   type IssuedToken,
+  type CompressionDemo,
   type LedgerEntry,
   type Me,
   type Memory,
@@ -107,6 +108,18 @@ export function useLedgerQuery(limit = 200) {
     queryKey: qk.ledger(limit),
     queryFn: () => getJSON<LedgerEntry[]>(`/api/ledger?limit=${limit}`),
     refetchInterval: 30_000,
+  });
+}
+
+// P2.3: side-by-side compression demo (all 4 read modes for one file).
+export function useCompressionDemoQuery(path: string | null) {
+  return useQuery({
+    queryKey: ["context", "compression-demo", path ?? ""],
+    queryFn: () =>
+      getJSON<CompressionDemo>(
+        `/api/context/compression-demo?path=${encodeURIComponent(path ?? "")}`,
+      ),
+    enabled: !!path && path.length > 0,
   });
 }
 
