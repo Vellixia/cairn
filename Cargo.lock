@@ -840,6 +840,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "cairn-tests"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "cairn-api",
+ "cairn-assemble",
+ "cairn-bench",
+ "cairn-context",
+ "cairn-core",
+ "cairn-embed",
+ "cairn-guard",
+ "cairn-ingest",
+ "cairn-mcp",
+ "cairn-memory",
+ "cairn-pack",
+ "cairn-proactive",
+ "cairn-profile",
+ "cairn-registry",
+ "cairn-rerank",
+ "cairn-session",
+ "cairn-share",
+ "cairn-shell",
+ "cairn-store",
+ "cairn-sync",
+ "chrono",
+ "hmac",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tower",
+ "uuid",
+]
+
+[[package]]
 name = "castaway"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

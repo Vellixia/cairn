@@ -23,6 +23,7 @@ members = [
     "crates/cairn-mcp",
     "crates/cairn-client",
     "crates/cairn-rerank",
+    "crates/cairn-tests",
 ]
 
 [workspace.package]
