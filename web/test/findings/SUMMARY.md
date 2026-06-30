@@ -77,3 +77,33 @@ Pinned cairn:dev sha `155bca4049c7` for these runs (bugs 08-1 + 10-1 + 10-2 + 10
   `ghcr.io/vellixia/cairn:latest`. For local verification run
   `docker compose -f docker-compose.yml --project-name cairn up -d cairn`
   (bypassing the override).
+
+## Run rust-ext-1 (api router coverage)
+
+Direct-URL nav of all 21 dashboard routes against `http://127.0.0.1:7777` (cairn-server
+`version=0.6.6`, admin / `AuditPass2026!`). One finding per route. Login flow OK; the
+dashboard does serve each route via the static_handler when navigated directly with
+`Accept: text/html`. Three new bugs surfaced and one chunk-load error blocks
+`/registry/packs/new`.
+
+### Totals
+
+| Verdict | Count |
+|---------|-------|
+| Total routes tested | 21 |
+| PASS | 18 |
+| PARTIAL | 1 |
+| FAIL | 2 |
+
+### New bugs
+
+- **BUG-2026-06-30-A** — RSC prefetch on registry hub crashes with `TypeError: Cannot read properties of undefined (reading 'call')` for `/registry/packs`, `/registry/trust`, `/registry/revocations`. cairn-api serves the API JSON body (`[]`, `{"keys":[]}`, `{"revocations":[]}`) for the `RSC: 1` prefetch request instead of the static HTML. Triggers on first load of `/registry/packs`.
+- **BUG-2026-06-30-B** — `/registry` → 302 → `/registry/packs` (no query) returns `[]` JSON to the browser address bar; user lands on a JSON viewer of `[]` instead of the registry page. Same root cause as A; the cairn-api router matches `/registry/packs` before the static_handler fallback.
+- **BUG-2026-06-30-C** — `/registry/packs/new` ChunkLoadError on `app/(app)/registry/packs/%5Bname%5D/page-9bfb0c3fd0e720be.js`. The static export did not pre-render `registry/packs/new.html` and the dynamic fallback chunk is missing → Next.js "Application error" page.
+
+### Previously-known bugs re-confirmed
+
+- **BUG 10-4** (static-fallback) — re-confirmed via different repro path. Direct nav with `?cb=` works; bare redirect from `/registry` and RSC prefetch still hit the API JSON.
+- **BUG 11-1** (command-palette `Enter` crash) — NOT reproduced via direct URL. RSC prefetch errors still produced by the registry hub (covered in BUG-2026-06-30-A).
+- Memory/architecture crash (previously documented) — NOT reproduced.
+- Mobile JSON parse error (previously documented) — NOT reproduced.
