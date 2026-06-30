@@ -118,8 +118,14 @@ impl GotchaTracker {
         self.total_failures += 1;
         let fingerprint = fingerprint_of(&event.topic);
 
-        // Evict expired records (lazy).
-        let cutoff = Instant::now() - self.window;
+        // Evict expired records (lazy). `Instant::now() - window` panics on
+        // a system that has been up for less than `window`, so we fall back
+        // to the earliest record we still hold (or the system epoch if the
+        // tracker is empty) - either way, no expired records can exist yet.
+        let now = Instant::now();
+        let cutoff = now
+            .checked_sub(self.window)
+            .unwrap_or_else(|| self.records.front().map(|r| r.at).unwrap_or(now));
         while let Some(front) = self.records.front() {
             if front.at < cutoff {
                 self.records.pop_front();

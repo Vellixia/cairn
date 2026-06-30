@@ -52,8 +52,12 @@ impl FollowupTracker {
         let fingerprint = fingerprint_of(query);
         let ids_set: HashSet<String> = ids.iter().cloned().collect();
 
-        // Evict expired entries
-        let cutoff = Instant::now() - self.window;
+        // Evict expired entries. Same defensive clamp as `gotcha_tracker::record`:
+        // `Instant::now() - window` panics on a system up for less than `window`.
+        let now = Instant::now();
+        let cutoff = now
+            .checked_sub(self.window)
+            .unwrap_or_else(|| self.entries.front().map(|e| e.at).unwrap_or(now));
         while let Some(front) = self.entries.front() {
             if front.at < cutoff {
                 self.entries.pop_front();
