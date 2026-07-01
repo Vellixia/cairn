@@ -4,6 +4,8 @@ This directory is the **agent-driven live E2E coverage** for every user-facing s
 
 It complements the existing hermetic Rust integration tests in `crates/cairn-tests/tests/01..24_*.rs` (which are unit/integration level, against `Store::open_in_memory()`). Live E2E here is the **acceptance** layer: did the real product behave the way the docs say it should, end-to-end across the API/MCP/CLI/UI/HelixDB stack?
 
+**Location:** `docs/live-e2e/`. Lives at the repo root so it is discoverable from the docs index and not buried under `web/`.
+
 ## When to run this
 
 After a feature lands on `0.7.1`. The walk is agent-driven via the `chrome-devtools` MCP server. The agent opens each doc, walks every step, fills the **Observed** and **Result** sections, takes a screenshot per UI step, and writes a finding file under `web/test/findings/` if any step fails.
