@@ -52,10 +52,10 @@ fn hook_suffix(command: &str) -> String {
         None => return command.to_string(),
     };
     let first_lower = first.to_ascii_lowercase();
-    let basename = std::path::Path::new(&first_lower)
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| first_lower.clone());
+    let basename = first_lower
+        .rsplit(['\\', '/'])
+        .next()
+        .unwrap_or(&first_lower);
     let is_cairn_exe = basename == "cairn" || basename == "cairn.exe";
     if !is_cairn_exe {
         return command.to_string();
@@ -92,10 +92,7 @@ pub fn is_any_cairn_hook(command: &str) -> bool {
     // one, it returns the full command unchanged -- in which case this returns false.
     let original = command.trim_start().to_ascii_lowercase();
     let first = original.split_whitespace().next().unwrap_or("");
-    let basename = std::path::Path::new(first)
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let basename = first.rsplit(['\\', '/']).next().unwrap_or(first);
     basename == "cairn" || basename == "cairn.exe"
 }
 
@@ -387,18 +384,30 @@ fn install_opencode(server: Option<&str>, token: Option<&str>) -> Result<()> {
 /// so we strip the config's parent directory from the absolute plugin path and forward-
 /// slash the separator (Windows paths use `\` which OpenCode does not parse).
 fn relative_plugin_path(plugin_abs: &str, config_path: &Path) -> String {
-    let config_dir = config_path
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
-    let plugin_path = PathBuf::from(plugin_abs);
-    match plugin_path.strip_prefix(&config_dir) {
-        Ok(rel) => rel
-            .components()
-            .map(|c| c.as_os_str().to_string_lossy().into_owned())
-            .collect::<Vec<_>>()
-            .join("/"),
-        Err(_) => plugin_abs.replace('\\', "/"),
+    // String-based path handling: tests + cross-platform configs use both `/` and `\`
+    // separators. We operate entirely on the string form so Windows-style absolute
+    // paths behave the same on Linux CI (where `Path::parent()` would lose the
+    // backslash-separated components).
+    let plugin_norm = plugin_abs.replace('\\', "/");
+    let config_norm = config_path.to_string_lossy().replace('\\', "/");
+    // Strip the basename from the config path to recover the directory.
+    let config_dir_norm = match config_norm.rsplit_once('/') {
+        Some((dir, _)) => dir.to_string(),
+        None => String::new(),
+    };
+    let prefix = if config_dir_norm.is_empty() {
+        String::new()
+    } else if config_dir_norm.ends_with('/') {
+        config_dir_norm.clone()
+    } else {
+        format!("{config_dir_norm}/")
+    };
+    if let Some(stripped) = plugin_norm.strip_prefix(&prefix) {
+        stripped.to_string()
+    } else if let Some(stripped) = plugin_norm.strip_prefix(&config_dir_norm) {
+        stripped.trim_start_matches('/').to_string()
+    } else {
+        plugin_norm
     }
 }
 
